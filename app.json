@@ -1,39 +1,52 @@
 {
   "expo": {
-    "name": "myapp",
-    "slug": "myapp",
+    "name": "oneul",
+    "slug": "myapp-local",
     "version": "1.0.0",
+    "scheme": "oneul",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": ["**/*"],
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "bundleIdentifier": "com.sjh060623.oneul.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "집 반경을 벗어났는지 확인하기 위해 위치를 사용해요.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "앱이 꺼져 있어도 출발 알림을 보내기 위해 위치를 사용해요.",
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+      }
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
     ],
+    "updates": {
+      "enabled": false,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
+    },
     "experiments": {
       "typedRoutes": true
+    },
+    "newArchEnabled": true,
+    "extra": {
+      "router": {}
+    },
+    "android": {
+      "package": "com.sjh060623.oneul.app"
     }
   }
 }
