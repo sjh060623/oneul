@@ -19,7 +19,9 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "집 반경을 벗어났는지 확인하기 위해 위치를 사용해요.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "앱이 꺼져 있어도 출발 알림을 보내기 위해 위치를 사용해요.",
-        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"],
+        "NSCameraUsageDescription": "기록에 사진을 추가하기 위해 카메라를 사용해요.",
+        "NSPhotoLibraryUsageDescription": "기록에 사진을 추가하기 위해 사진을 사용해요."
       }
     },
     "plugins": [

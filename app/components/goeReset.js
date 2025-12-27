@@ -1,7 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 import { startHomeGeofence } from "../geoBackground";
 
 const HOME_KEY = "HOME_COORD_V1";
@@ -9,6 +17,7 @@ const HOME_KEY = "HOME_COORD_V1";
 export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
   const [perm, setPerm] = useState(null);
   const [home, setHome] = useState(null);
+  const [isEnabled, setIsEnabled] = useState(false);
   async function enableGeofence() {
     const saved = await AsyncStorage.getItem(HOME_KEY);
     if (!saved) {
@@ -24,8 +33,26 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
       radiusM: 80,
     });
 
-    Alert.alert("켜짐", "앱 종료 후에도 알림이 옵니다.");
+    Alert.alert("켜짐", "앱 종료 후에도 알림이 와요.");
   }
+  async function disableGeofence() {
+    const saved = await AsyncStorage.getItem(HOME_KEY);
+    if (!saved) {
+      Alert.alert("집 위치 없음", "집을 먼저 설정하세요.");
+      return;
+    }
+
+    Alert.alert("꺼짐", "앱 종료 후엔 알림이 꺼져요.");
+  }
+  const toggleSwitch = () => {
+    setIsEnabled((previousState) => !previousState);
+    if (isEnabled == false) {
+      enableGeofence();
+    } else {
+      disableGeofence();
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -132,9 +159,12 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
       <View style={styles.card}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>집 설정</Text>
-          <View style={styles.badge}>
+          {/**
+           * 
+           *    <View style={styles.badge}>
             <Text style={styles.badgeText}>{radiusM}m</Text>
           </View>
+           */}
         </View>
 
         <Text style={styles.sub} numberOfLines={2}>
@@ -150,9 +180,7 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
           >
             <Text style={styles.btnPrimaryText}>현재 위치를 집으로</Text>
           </Pressable>
-          <Pressable onPress={enableGeofence}>
-            <Text>앱 종료 후 알림 켜기</Text>
-          </Pressable>
+
           <Pressable onPress={clearHome} style={[styles.btn, styles.btnGhost]}>
             <Text style={styles.btnGhostText}>집 초기화</Text>
           </Pressable>
@@ -163,6 +191,22 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
             위치 권한이 꺼져 있어요. 설정에서 허용해 주세요.
           </Text>
         ) : null}
+        <View style={styles.c}>
+          <Text style={styles.l}>앱 종료 후 알림</Text>
+          <Switch
+            trackColor={{ false: "#767577", true: "#34C759" }} // iOS 기본 초록색(#34C759)
+            thumbColor={
+              Platform.OS === "ios"
+                ? undefined
+                : isEnabled
+                ? "#f4f3f4"
+                : "#f4f3f4"
+            }
+            ios_backgroundColor="#3e3e3e"
+            onValueChange={toggleSwitch}
+            value={isEnabled}
+          />
+        </View>
       </View>
     </View>
   );
@@ -230,4 +274,20 @@ const styles = StyleSheet.create({
   radiusBtnText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   disabledBtn: { opacity: 0.5 },
   warn: { color: "#ff9f0a", fontSize: 12, marginTop: 10, fontWeight: "700" },
+  c: {
+    flexDirection: "row", // 텍스트와 스위치를 가로로 배치
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    borderRadius: 18,
+  },
+  l: {
+    fontSize: 12,
+    color: "#fff",
+    fontWeight: "700",
+  },
 });

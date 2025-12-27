@@ -9,16 +9,14 @@ export default function Profile() {
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <View style={styles.container}>
         <Text style={styles.title}>프로필</Text>
-        <Text style={styles.subtitle}>프로필 기능이 곧 추가될 예정입니다</Text>
+        <GeoReset />
       </View>
-      <GeoReset />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
-    width: "100%",
     flex: 1,
     backgroundColor: "#000",
     paddingHorizontal: 16,
@@ -26,8 +24,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
   title: {
     color: "#fff",

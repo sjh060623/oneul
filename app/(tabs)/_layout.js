@@ -26,6 +26,15 @@ export default function TabsLayout() {
         />
         <Label>홈</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="record">
+        <Icon
+          sf={{
+            default: "book.pages",
+            selected: "book.pages",
+          }}
+        />
+        <Label>기록</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="search">
         <Icon
           sf={{

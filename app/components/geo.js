@@ -221,9 +221,12 @@ export default function Home({ radiusM = 80 }) {
         <View style={styles.card}>
           <View style={styles.row}>
             <Text style={styles.title}>위치</Text>
-            <View style={styles.badge}>
+            {/**
+             * 
+             *   <View style={styles.badge}>
               <Text style={styles.badgeText}>{radiusM}m</Text>
             </View>
+             */}
           </View>
 
           <Text style={styles.msg} numberOfLines={2}>

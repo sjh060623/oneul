@@ -1,3 +1,4 @@
+// app/(tabs)/home.js
 import { router } from "expo-router";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -6,9 +7,9 @@ import GeoStatus from "../components/geo";
 import { useGoals } from "../src/goalsStore";
 
 export default function Home() {
-  const { goals, toggleGoal, removeGoal } = useGoals();
+  const { goals, completeGoal, removeGoal } = useGoals();
 
-  const doneCount = useMemo(() => goals.filter((g) => g.done).length, [goals]);
+  const leftCount = goals.length;
 
   const goCoordGoals = useMemo(
     () =>
@@ -39,9 +40,7 @@ export default function Home() {
 
           <View style={styles.statusRow}>
             <Text style={styles.statusLabel}>현재 상태</Text>
-            <Text style={styles.statusValue}>
-              {doneCount}/{goals.length} 달성
-            </Text>
+            <Text style={styles.statusValue}>남은 목표 {leftCount}개</Text>
           </View>
 
           {normalGoals.length === 0 ? (
@@ -53,18 +52,17 @@ export default function Home() {
               {normalGoals.map((g) => (
                 <Pressable
                   key={g.id}
-                  onPress={() => toggleGoal(g.id)}
-                  style={[styles.goalRow, g.done && styles.goalRowDone]}
+                  onPress={() => completeGoal(g.id)} // ✅ 누르면 완료 → 홈에서 사라지고 기록으로 이동
+                  onLongPress={() => removeGoal(g.id)}
+                  style={styles.goalRow}
                 >
-                  <View style={[styles.dot, g.done && styles.dotDone]} />
-                  <Text
-                    style={[styles.goalText, g.done && styles.goalTextDone]}
-                    numberOfLines={1}
-                  >
+                  <View style={styles.dot} />
+                  <Text style={styles.goalText} numberOfLines={1}>
                     {g.text}
                   </Text>
                 </Pressable>
               ))}
+              <Text style={styles.hint}>누르면 완료 · 길게 누르면 삭제</Text>
             </View>
           )}
 
@@ -78,16 +76,13 @@ export default function Home() {
               {goCoordGoals.map((g) => (
                 <Pressable
                   key={g.id}
-                  onPress={() => toggleGoal(g.id)}
-                  onLongPress={() => removeGoal?.(g.id)}
-                  style={[styles.goalRow, g.done && styles.goalRowDone]}
+                  onPress={() => completeGoal(g.id)} // ✅ 완료 처리
+                  onLongPress={() => removeGoal(g.id)}
+                  style={styles.goalRow}
                 >
-                  <View style={[styles.dot, g.done && styles.dotDone]} />
+                  <View style={styles.dot} />
                   <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.goalText, g.done && styles.goalTextDone]}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.goalText} numberOfLines={1}>
                       {g.text}
                     </Text>
                     <Text style={styles.coordText} numberOfLines={1}>
@@ -97,85 +92,78 @@ export default function Home() {
                   </View>
                 </Pressable>
               ))}
-
-              <Text style={styles.sectionHint}>길게 누르면 삭제</Text>
+              <Text style={styles.hint}>누르면 완료 · 길게 누르면 삭제</Text>
             </View>
           ) : null}
         </View>
 
-        <GeoStatus radiusM={80} />
+        <GeoStatus radiusM={80} goalRadiusM={120} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#000",
-    paddingHorizontal: 16,
+  screen: { flex: 1, backgroundColor: "#000", paddingHorizontal: 16 },
+  title: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+    marginTop: 8,
+    marginBottom: 12,
   },
-  title: { color: "#fff", fontSize: 28, fontWeight: "800", marginBottom: 14 },
+
   card: {
     backgroundColor: "#121212",
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
     borderColor: "#1f1f1f",
-    flex: 1,
   },
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
   },
-  cardTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  cardTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
   addBtn: {
-    backgroundColor: "#1f1f1f",
+    height: 36,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  addBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  addBtnText: { color: "#000", fontSize: 12, fontWeight: "900" },
+
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#1f1f1f",
-    borderBottomWidth: 1,
-    borderBottomColor: "#1f1f1f",
+    marginTop: 12,
   },
-  statusLabel: { color: "#9aa0a6", fontSize: 13, fontWeight: "600" },
-  statusValue: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  emptyText: { color: "#666", fontSize: 13, paddingTop: 12 },
-  goalList: { gap: 10, paddingBottom: 24 },
+  statusLabel: { color: "#6f7377", fontSize: 12, fontWeight: "800" },
+  statusValue: { color: "#fff", fontSize: 12, fontWeight: "900" },
+
+  emptyText: { color: "#6f7377", marginTop: 12, fontSize: 12 },
+
   goalRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0c0c0c",
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    gap: 10,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#1f1f1f",
   },
-  goalRowDone: { opacity: 0.75 },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: "#3a3a3a",
-    marginRight: 10,
+  dot: { width: 10, height: 10, borderRadius: 10, backgroundColor: "#fff" },
+  goalText: { color: "#fff", fontSize: 13, fontWeight: "900", flex: 1 },
+  coordText: {
+    color: "#6f7377",
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: "700",
   },
-  dotDone: { borderColor: "#fff" },
-  goalText: { color: "#fff", fontSize: 14, fontWeight: "600", flex: 1 },
-  goalTextDone: { textDecorationLine: "line-through", color: "#9aa0a6" },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -197,11 +185,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
-  coordText: {
-    color: "#6f7377",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "700",
-  },
-  sectionHint: { color: "#6f7377", fontSize: 12, marginTop: 8 },
+  hint: { color: "#6f7377", fontSize: 12, marginTop: 8, fontWeight: "800" },
 });

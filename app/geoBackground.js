@@ -6,7 +6,7 @@ import * as TaskManager from "expo-task-manager";
 export const GEOFENCE_TASK = "HOME_GEOFENCE_TASK_V1";
 const GOALS_KEY = "GOALS_V1";
 const GEOFENCE_STATE_KEY = "GEOFENCE_STATE_V1"; // { home: true/false, goals: { [goalId]: true/false } }
-
+const RECORDS_KEY = "GOAL_RECORDS_V1";
 // iOS
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -102,6 +102,65 @@ async function setGeofenceState(next) {
   }
 }
 
+function dateKeyFrom(ts) {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+// ✅ 목표를 active(GOALS_V1)에서 빼고 records(GOAL_RECORDS_V1)로 이동
+async function moveGoalToRecordsById(goalId) {
+  try {
+    const [rawGoals, rawRecs] = await Promise.all([
+      AsyncStorage.getItem(GOALS_KEY),
+      AsyncStorage.getItem(RECORDS_KEY),
+    ]);
+
+    const goals = rawGoals ? JSON.parse(rawGoals) : [];
+    const recs = rawRecs ? JSON.parse(rawRecs) : [];
+
+    if (!Array.isArray(goals)) return;
+
+    const idStr = String(goalId);
+    const found = goals.find((g) => String(g?.id) === idStr);
+
+    // goals에서 제거
+    const nextGoals = goals.filter((g) => String(g?.id) !== idStr);
+
+    // records에 추가
+    const now = Date.now();
+    const nextRecs = Array.isArray(recs) ? recs.slice() : [];
+
+    if (found) {
+      const text = String(found?.text ?? found?.title ?? "").trim();
+      if (text) {
+        nextRecs.unshift({
+          id: String(found?.id ?? idStr),
+          text,
+          type: String(found?.type ?? "legacy"),
+          place: String(found?.place ?? ""),
+          title: String(found?.title ?? ""),
+          coord: found?.coord ?? null,
+          createdAt: Number(found?.createdAt ?? now),
+          completedAt: now,
+          dateKey: dateKeyFrom(now),
+          memo: "",
+          photoUri: "",
+        });
+      }
+    }
+
+    await Promise.all([
+      AsyncStorage.setItem(GOALS_KEY, JSON.stringify(nextGoals)),
+      AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(nextRecs)),
+    ]);
+  } catch {
+    // ignore
+  }
+}
+
 TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
   if (error) return;
 
@@ -174,18 +233,25 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
     }
 
     if (isEnter) {
-      if (prev === true) return;
+      if (prev === true) return; // 이미 inside면 중복
 
       const goalName = await getGoalNameById(goalId);
+
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: goalName,
-          body: "저장한 목표 위치에 가까워졌어요.",
+          title: "목표 달성!",
+          body: goalName
+            ? `${goalName}에 도착했어요. 기록으로 이동했어요.`
+            : "목표 위치에 도착했어요. 기록으로 이동했어요.",
         },
         trigger: null,
       });
+
+      // ✅ 도착하면: goals -> records 로 이동 (홈에서 사라짐)
+      await moveGoalToRecordsById(goalId);
       await removeGoalById(goalId);
 
+      // 상태는 inside로 업데이트(중복 방지)
       const nextGoals = { ...(state.goals || {}), [goalId]: true };
       await setGeofenceState({ ...state, goals: nextGoals });
       return;
