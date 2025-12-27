@@ -1,8 +1,3 @@
-// app/geoBackground.js
-// 백그라운드/종료 상태에서도 지오펜스(ENTER/EXIT)로 알림
-// - home 1개 + (좌표 목표들) 여러개 등록
-// - iOS는 지오펜스 region 수가 제한(보통 20개)이 있으니 목표가 많으면 일부만 등록해야 함
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
@@ -12,7 +7,7 @@ export const GEOFENCE_TASK = "HOME_GEOFENCE_TASK_V1";
 const GOALS_KEY = "GOALS_V1";
 const GEOFENCE_STATE_KEY = "GEOFENCE_STATE_V1"; // { home: true/false, goals: { [goalId]: true/false } }
 
-// iOS 알림
+// iOS
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
