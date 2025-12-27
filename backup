@@ -1,5 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useIsFocused } from "@react-navigation/native";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,37 +14,11 @@ import {
   View,
 } from "react-native";
 import { useGoals } from "./src/goalsStore";
+
 export default function AddGoalModal() {
-  const PICK_KEY = "PICKED_PLACE_V1";
   const { addGoal } = useGoals();
   const [place, setPlace] = useState("");
   const [title, setTitle] = useState("");
-  const [pickedCoord, setPickedCoord] = useState(null); // { latitude, longitude } | null
-
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    if (!isFocused) return;
-
-    const pullPicked = async () => {
-      try {
-        const v = await AsyncStorage.getItem(PICK_KEY);
-        if (!v) return;
-        const c = JSON.parse(v);
-        if (!c?.latitude || !c?.longitude) return;
-
-        setPickedCoord({
-          latitude: Number(c.latitude),
-          longitude: Number(c.longitude),
-        });
-        await AsyncStorage.removeItem(PICK_KEY);
-      } catch {
-        // ignore
-      }
-    };
-
-    pullPicked();
-  }, [isFocused]);
 
   const placePlaceholders = [
     "집",
@@ -78,6 +50,7 @@ export default function AddGoalModal() {
     "청소",
   ];
   const [mode, setMode] = useState("do");
+
   const [segW, setSegW] = useState(0);
   const slideX = useRef(new Animated.Value(0)).current;
 
@@ -109,7 +82,6 @@ export default function AddGoalModal() {
   useEffect(() => {
     setPlace("");
     setTitle("");
-    setPickedCoord(null);
   }, [mode]);
 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -175,16 +147,7 @@ export default function AddGoalModal() {
       }
 
       const combined = p ? `${p} 에서 ${t} 하기` : `${t} 하기`;
-      addGoal({
-        id: String(Date.now()),
-        type: "do",
-        place: p,
-        title: t,
-        coord: null,
-        text: combined,
-        done: false,
-        createdAt: Date.now(),
-      });
+      addGoal(combined);
     } else {
       // go
       if (!p) {
@@ -193,19 +156,7 @@ export default function AddGoalModal() {
       }
 
       const combined = `${p} 가기`;
-
-      addGoal({
-        id: String(Date.now()),
-        type: "go",
-        place: p,
-        title: "",
-        coord: pickedCoord
-          ? { latitude: pickedCoord.latitude, longitude: pickedCoord.longitude }
-          : null,
-        text: combined,
-        done: false,
-        createdAt: Date.now(),
-      });
+      addGoal(combined);
     }
 
     setTitle("");
@@ -228,7 +179,7 @@ export default function AddGoalModal() {
           style={styles.segWrap}
           onLayout={(e) => setSegW(e.nativeEvent.layout.width)}
         >
-          {/* 태ㅂ */}
+          {/* 미끄러지는 캡슐 */}
           {pillW ? (
             <Animated.View
               pointerEvents="none"
@@ -324,7 +275,7 @@ export default function AddGoalModal() {
                 </View>
 
                 <Pressable
-                  onPress={() => router.push("/map-picker")}
+                  onPress={() => Alert.alert("지도 선택", "미완입니다")}
                   style={styles.mapBtn}
                 >
                   <Text style={styles.mapBtnText}>위치</Text>
@@ -336,30 +287,10 @@ export default function AddGoalModal() {
           )}
         </View>
 
-        {pickedCoord ? (
-          <View style={styles.placeChipRow}>
-            <View style={styles.placeChip}>
-              <Text style={styles.placeChipLabel}>좌표</Text>
-              <Text style={styles.placeChipText} numberOfLines={1}>
-                {pickedCoord.latitude.toFixed(6)},{" "}
-                {pickedCoord.longitude.toFixed(6)}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => setPickedCoord(null)}
-              style={styles.placeChipClear}
-            >
-              <Text style={styles.placeChipClearText}>지우기</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
         <Text style={styles.hintText}>
           {mode === "do"
             ? title.trim()
-              ? `오늘은 ${
-                  place.trim() ? place.trim() + "에서 " : ""
-                }${title.trim()} 하기`
+              ? `오늘은 ${place.trim() ? place.trim() : ""}${title.trim()} 하기`
               : "할 일을 입력해 주세요."
             : place.trim()
             ? `오늘은 ${place.trim()} 가기`
@@ -507,51 +438,6 @@ const styles = StyleSheet.create({
     color: "#6f7377",
     fontSize: 12,
     marginTop: 10,
-  },
-
-  placeChipRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-  },
-  placeChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
-  placeChipLabel: {
-    color: "#9aa0a6",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  placeChipText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  placeChipClear: {
-    height: 36,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeChipClearText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
   },
 
   segWrap: {
