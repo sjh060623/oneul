@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import { AppState } from "react-native";
-const ACTIVE_KEY = "GOALS_V1"; // ✅ geoBackground.js가 이 키를 보고 목표 이름 찾음
+const ACTIVE_KEY = "GOALS_V1"; // geoBackground.j
 const RECORDS_KEY = "GOAL_RECORDS_V1";
 
 const GoalsCtx = createContext(null);
@@ -21,7 +21,7 @@ function uid() {
 function normalizeGoal(input) {
   const now = Date.now();
 
-  // string 호환
+  // string
   if (typeof input === "string" || typeof input === "number") {
     const t = String(input || "").trim();
     if (!t) return null;
@@ -94,7 +94,6 @@ export function GoalsProvider({ children }) {
         const goalsArr = Array.isArray(g) ? g : [];
         const recordsArr = Array.isArray(r) ? r : [];
 
-        // ✅ 마이그레이션: 예전 goals에 done이 섞여있으면 records로 이동
         const nextGoals = [];
         const moved = [];
         for (const item of goalsArr) {
@@ -113,7 +112,6 @@ export function GoalsProvider({ children }) {
               photoUri: String(item.photoUri ?? ""),
             });
           } else {
-            // active는 normalize해서 안전하게
             const ng = normalizeGoal(item);
             if (ng) nextGoals.push(ng);
           }
@@ -165,7 +163,6 @@ export function GoalsProvider({ children }) {
         AsyncStorage.getItem(RECORDS_KEY),
       ]);
 
-      // ✅ 문자열이 안 바뀌었으면 setState 안 함(리렌더 폭주 방지)
       if (
         rawGoals === lastGoalsRawRef.current &&
         rawRecords === lastRecordsRawRef.current
@@ -208,7 +205,6 @@ export function GoalsProvider({ children }) {
     }
   };
 
-  // ✅ 1) 주기적으로 갱신(geoBackground가 바꾼 AsyncStorage 반영)
   useEffect(() => {
     const t = setInterval(() => {
       reloadFromStorage();
@@ -216,7 +212,6 @@ export function GoalsProvider({ children }) {
     return () => clearInterval(t);
   }, []);
 
-  // ✅ 2) 앱이 다시 active가 될 때 즉시 갱신
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") reloadFromStorage();
@@ -241,7 +236,6 @@ export function GoalsProvider({ children }) {
       setGoals((prev) => [g, ...prev]);
     };
 
-    // ✅ 완료 처리: 홈에서 누르면 active에서 제거 + records로 이동
     const completeGoal = (id) => {
       setGoals((prev) => {
         const found = prev.find((g) => g.id === id);

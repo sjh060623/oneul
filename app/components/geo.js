@@ -251,19 +251,6 @@ export default function Home({ radiusM = 80 }) {
           )}
         </View>
       </View>
-
-      {goGoalsWithDistance.map((g) => (
-        <View key={g.id} style={styles.goalItem}>
-          <Text style={styles.goalText}>{g.text}</Text>
-          <Text style={styles.coordText} numberOfLines={1}>
-            {g.coord.latitude.toFixed(6)}, {g.coord.longitude.toFixed(6)}
-          </Text>
-          <Text style={styles.distText} numberOfLines={1}>
-            거리:{" "}
-            {g.meters == null ? "-" : `${Math.max(0, Math.round(g.meters))}m`}
-          </Text>
-        </View>
-      ))}
     </View>
   );
 }

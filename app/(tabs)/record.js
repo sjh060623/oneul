@@ -1,6 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Image,
   Modal,
@@ -36,7 +37,7 @@ function buildMonthGrid(date) {
   const y = date.getFullYear();
   const m = date.getMonth();
   const first = new Date(y, m, 1);
-  const startDow = first.getDay(); // 0 Sun
+  const startDow = first.getDay();
   const last = new Date(y, m + 1, 0);
   const daysInMonth = last.getDate();
 
@@ -51,9 +52,9 @@ function buildMonthGrid(date) {
 }
 
 export default function RecordScreen() {
-  const { records, updateRecord } = useGoals();
+  const { records, updateRecord, removeRecord } = useGoals();
 
-  const [tab, setTab] = useState("calendar"); // calendar | list
+  const [tab, setTab] = useState("calendar"); // calendar list
   const slide = useRef(new Animated.Value(0)).current; // 0 or 1
 
   useEffect(() => {
@@ -100,6 +101,26 @@ export default function RecordScreen() {
     setSelected(null);
     setMemo("");
     setPhotoUri("");
+  };
+
+  const confirmDelete = (rec) => {
+    Alert.alert(
+      "기록 삭제",
+      "이 기록을 삭제할까요?",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "삭제",
+          style: "destructive",
+          onPress: () => {
+            removeRecord(rec.id);
+            // 혹시 모달이 열려있던 아이템이면 닫기
+            if (selected?.id === rec.id) closeModal();
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
   const pickPhoto = async () => {
     try {
@@ -274,6 +295,7 @@ export default function RecordScreen() {
                   <Pressable
                     key={r.id}
                     onPress={() => openModal(r)}
+                    onLongPress={() => confirmDelete(r)}
                     style={[styles.itemRow, idx === 0 && { borderTopWidth: 0 }]}
                   >
                     <View style={{ flex: 1 }}>
@@ -319,6 +341,7 @@ export default function RecordScreen() {
                       <Pressable
                         key={r.id}
                         onPress={() => openModal(r)}
+                        onLongPress={() => confirmDelete(r)}
                         style={[
                           styles.itemRow,
                           idx === 0 && { borderTopWidth: 0 },

@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { startHomeGeofence } from "../geoBackground";
-
+const GEOFENCE_ENABLED_KEY = "HOME_GEOFENCE_ENABLED_V1";
 const HOME_KEY = "HOME_COORD_V1";
 
 export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
@@ -32,8 +32,6 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
       longitude: home.longitude,
       radiusM: 80,
     });
-
-    Alert.alert("켜짐", "앱 종료 후에도 알림이 와요.");
   }
   async function disableGeofence() {
     const saved = await AsyncStorage.getItem(HOME_KEY);
@@ -41,15 +39,21 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
       Alert.alert("집 위치 없음", "집을 먼저 설정하세요.");
       return;
     }
-
-    Alert.alert("꺼짐", "앱 종료 후엔 알림이 꺼져요.");
   }
-  const toggleSwitch = () => {
-    setIsEnabled((previousState) => !previousState);
-    if (isEnabled == false) {
-      enableGeofence();
+  const toggleSwitch = async () => {
+    const next = !isEnabled;
+    setIsEnabled(next);
+
+    try {
+      await AsyncStorage.setItem(GEOFENCE_ENABLED_KEY, next ? "1" : "0");
+    } catch (e) {
+      // ignore
+    }
+
+    if (next) {
+      await enableGeofence();
     } else {
-      disableGeofence();
+      await disableGeofence();
     }
   };
 
@@ -69,6 +73,16 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (!mounted) return;
         setPerm(status);
+      } catch (e) {
+        // ignore
+      }
+      try {
+        const raw = await AsyncStorage.getItem(GEOFENCE_ENABLED_KEY);
+        if (!mounted) return;
+        setIsEnabled(raw === "1");
+        if (raw === "1") {
+          await enableGeofence();
+        }
       } catch (e) {
         // ignore
       }

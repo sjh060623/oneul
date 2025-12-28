@@ -4,9 +4,13 @@ import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import GeoStatus from "../components/geo";
+import HomeMap from "../components/homeMap";
 import { useGoals } from "../src/goalsStore";
+import { useGoGoalsWithDistance } from "../src/useGoGoalsWithDistance";
 
 export default function Home() {
+  const { goGoalsWithDistance } = useGoGoalsWithDistance({ pollMs: 5000 });
+
   const { goals, completeGoal, removeGoal } = useGoals();
 
   const leftCount = goals.length;
@@ -52,7 +56,7 @@ export default function Home() {
               {normalGoals.map((g) => (
                 <Pressable
                   key={g.id}
-                  onPress={() => completeGoal(g.id)} // ✅ 누르면 완료 → 홈에서 사라지고 기록으로 이동
+                  onPress={() => completeGoal(g.id)}
                   onLongPress={() => removeGoal(g.id)}
                   style={styles.goalRow}
                 >
@@ -73,10 +77,10 @@ export default function Home() {
                 <Text style={styles.sectionCount}>{goCoordGoals.length}</Text>
               </View>
 
-              {goCoordGoals.map((g) => (
+              {goGoalsWithDistance.map((g) => (
                 <Pressable
                   key={g.id}
-                  onPress={() => completeGoal(g.id)} // ✅ 완료 처리
+                  onPress={() => completeGoal(g.id)}
                   onLongPress={() => removeGoal(g.id)}
                   style={styles.goalRow}
                 >
@@ -87,7 +91,10 @@ export default function Home() {
                     </Text>
                     <Text style={styles.coordText} numberOfLines={1}>
                       {g.coord.latitude.toFixed(6)},{" "}
-                      {g.coord.longitude.toFixed(6)}
+                      {g.coord.longitude.toFixed(6)} 거리:{" "}
+                      {g.meters == null
+                        ? "-"
+                        : `${Math.max(0, Math.round(g.meters))}m`}
                     </Text>
                   </View>
                 </Pressable>
@@ -98,6 +105,7 @@ export default function Home() {
         </View>
 
         <GeoStatus radiusM={80} goalRadiusM={120} />
+        <HomeMap />
       </ScrollView>
     </SafeAreaView>
   );

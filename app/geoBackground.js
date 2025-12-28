@@ -110,7 +110,6 @@ function dateKeyFrom(ts) {
   return `${y}-${m}-${dd}`;
 }
 
-// ✅ 목표를 active(GOALS_V1)에서 빼고 records(GOAL_RECORDS_V1)로 이동
 async function moveGoalToRecordsById(goalId) {
   try {
     const [rawGoals, rawRecs] = await Promise.all([
@@ -241,8 +240,8 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
         content: {
           title: "목표 달성!",
           body: goalName
-            ? `${goalName}에 도착했어요. 기록으로 이동했어요.`
-            : "목표 위치에 도착했어요. 기록으로 이동했어요.",
+            ? `${goalName}근처에 도착했어요.`
+            : "목표 위치 근처에 도착했어요.",
         },
         trigger: null,
       });
