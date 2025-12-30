@@ -231,7 +231,6 @@ export default function HomeMap({ height = 420 }) {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: 12,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#1f1f1f",

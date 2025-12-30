@@ -1,11 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
-  Easing,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -13,581 +12,387 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useGoals } from "./src/goalsStore";
+
+// 1. 인터랙티브 버튼 컴포넌트 (전체 영역 터치 가능하도록 개선)
+const AnimatedPressable = ({ children, onPress, style, disabled }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const onPressIn = () =>
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true }).start();
+  const onPressOut = () =>
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+
+  return (
+    <Animated.View
+      style={[{ transform: [{ scale }] }, disabled && { opacity: 0.4 }]}
+    >
+      <Pressable
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={onPress}
+        disabled={disabled}
+        style={[
+          style,
+          { width: "100%", alignItems: "center", justifyContent: "center" },
+        ]}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+};
+
 export default function AddGoalModal() {
   const PICK_KEY = "PICKED_PLACE_V1";
   const { addGoal } = useGoals();
   const [place, setPlace] = useState("");
   const [title, setTitle] = useState("");
-  const [pickedCoord, setPickedCoord] = useState(null); // { latitude, longitude } | null
-
+  const [pickedCoord, setPickedCoord] = useState(null);
   const isFocused = useIsFocused();
 
+  // 탭 반응형 계산 상태
+  const [containerWidth, setContainerWidth] = useState(0);
+  const padding = 4;
+  const pillWidth = (containerWidth - padding * 2) / 2;
+
+  const [mode, setMode] = useState("do"); // "do" (~하기), "go" (~가기)
+  const slideX = useRef(new Animated.Value(0)).current;
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const placeholderY = useRef(new Animated.Value(0)).current;
+
+  // 데이터 로딩 및 애니메이션 로직
   useEffect(() => {
     if (!isFocused) return;
-
     const pullPicked = async () => {
       try {
         const v = await AsyncStorage.getItem(PICK_KEY);
-        if (!v) return;
-        const c = JSON.parse(v);
-        if (!c?.latitude || !c?.longitude) return;
-
-        setPickedCoord({
-          latitude: Number(c.latitude),
-          longitude: Number(c.longitude),
-        });
-        await AsyncStorage.removeItem(PICK_KEY);
-      } catch {
-        // ignore
-      }
+        if (v) {
+          const c = JSON.parse(v);
+          setPickedCoord({
+            latitude: Number(c.latitude),
+            longitude: Number(c.longitude),
+          });
+          await AsyncStorage.removeItem(PICK_KEY);
+        }
+      } catch {}
     };
-
     pullPicked();
   }, [isFocused]);
 
-  const placePlaceholders = [
-    "집",
-    "학교",
-    "학원",
-    "카페",
-    "도서관",
-    "헬스장",
-    "회사",
-    "편의점",
-    "공원",
-    "스터디룸",
-    "병원",
-    "지하철역",
-  ];
-
-  const todoPlaceholders = [
-    "복습",
-    "운동",
-    "독서",
-    "과제",
-    "정리",
-    "면접 준비",
-    "코딩",
-    "프로젝트",
-    "알바",
-    "게임",
-    "산책",
-    "청소",
-  ];
-  const [mode, setMode] = useState("do");
-  const [segW, setSegW] = useState(0);
-  const slideX = useRef(new Animated.Value(0)).current;
-
-  const GAP = 6;
-  const PAD = 4;
-
-  const pillW = useMemo(() => {
-    if (!segW) return 0;
-    const inner = segW - PAD * 2;
-    return (inner - GAP) / 2;
-  }, [segW]);
-
-  const toX = useMemo(() => {
-    return mode === "do" ? 0 : pillW + GAP;
-  }, [mode, pillW]);
-
   useEffect(() => {
-    if (!pillW) return;
-
     Animated.spring(slideX, {
-      toValue: toX,
+      toValue: mode === "do" ? 0 : 1,
       useNativeDriver: true,
-      damping: 18,
-      stiffness: 220,
-      mass: 0.9,
+      damping: 20,
+      stiffness: 200,
     }).start();
-  }, [toX, pillW, slideX]);
-
-  useEffect(() => {
-    setPlace("");
-    setTitle("");
-    setPickedCoord(null);
   }, [mode]);
-
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
-
-  const placeY = React.useRef(new Animated.Value(0)).current;
-  const todoY = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const tick = () => {
-      Animated.parallel([
-        Animated.timing(placeY, {
-          toValue: -8,
-          duration: 140,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(todoY, {
-          toValue: -8,
-          duration: 140,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]).start(({ finished }) => {
-        if (!finished) return;
-
-        const maxLen = Math.max(
-          placePlaceholders.length,
-          todoPlaceholders.length
-        );
-        setPlaceholderIndex((i) => (i + 1) % maxLen);
-        placeY.setValue(10);
-        todoY.setValue(10);
-
-        Animated.parallel([
-          Animated.timing(placeY, {
+      Animated.timing(placeholderY, {
+        toValue: -10,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) {
+          setPlaceholderIndex((prev) => (prev + 1) % 5);
+          placeholderY.setValue(10);
+          Animated.timing(placeholderY, {
             toValue: 0,
-            duration: 220,
-            easing: Easing.out(Easing.quad),
+            duration: 200,
             useNativeDriver: true,
-          }),
-          Animated.timing(todoY, {
-            toValue: 0,
-            duration: 220,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]).start();
+          }).start();
+        }
       });
     };
-
-    const id = setInterval(tick, 2000);
+    const id = setInterval(tick, 2500);
     return () => clearInterval(id);
-  }, [placeY, todoY, placePlaceholders.length, todoPlaceholders.length]);
+  }, []);
 
   const onAdd = () => {
     const p = place.trim();
     const t = title.trim();
-
     if (mode === "do") {
-      if (!t) {
-        Alert.alert("할 일 필요", "할 일을 입력해 주세요.");
-        return;
-      }
-
-      const combined = p ? `${p} 에서 ${t} 하기` : `${t} 하기`;
+      if (!t) return Alert.alert("입력 확인", "할 일을 입력해 주세요.");
+      const baseTitle = t.endsWith("하기") ? t.slice(0, -2).trim() : t;
       addGoal({
         id: String(Date.now()),
-        type: "do",
+        type: mode,
         place: p,
-        title: t,
-        coord: null,
-        text: combined,
-        done: false,
+        title: baseTitle,
+        coord: pickedCoord,
+        text: p ? `${p}에서 ${baseTitle}하기` : `${baseTitle}하기`,
         createdAt: Date.now(),
       });
     } else {
-      // go
-      if (!p) {
-        Alert.alert("갈 곳 필요", "갈 곳을 입력해 주세요.");
-        return;
-      }
-
-      const combined = `${p} 가기`;
-
+      if (!p) return Alert.alert("입력 확인", "갈 곳을 입력해 주세요.");
+      const basePlace = p.endsWith("가기") ? p.slice(0, -2).trim() : p;
       addGoal({
         id: String(Date.now()),
-        type: "go",
-        place: p,
+        type: mode,
+        place: basePlace,
         title: "",
-        coord: pickedCoord
-          ? { latitude: pickedCoord.latitude, longitude: pickedCoord.longitude }
-          : null,
-        text: combined,
-        done: false,
+        coord: pickedCoord,
+        text: `${basePlace} 가기`,
         createdAt: Date.now(),
       });
     }
-
-    setTitle("");
-    setPlace("");
     Keyboard.dismiss();
     router.back();
   };
 
-  let date = new Date();
+  const todoPlaceholders = ["복습", "운동", "독서", "코딩", "산책"];
+  const placePlaceholders = ["집", "카페", "헬스장", "회사", "공원"];
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.sheet}>
-        <Text style={styles.sheetTitle}>오늘은?</Text>
+    <View style={styles.container}>
+      {/* 2. 배경 터치 영역: 시트 밖을 누르면 모달 닫힘 */}
+      <Pressable style={styles.backdrop} onPress={() => router.back()} />
 
-        <View
-          style={styles.segWrap}
-          onLayout={(e) => setSegW(e.nativeEvent.layout.width)}
-        >
-          {/* 태ㅂ */}
-          {pillW ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.segPill,
-                {
-                  width: pillW,
-                  transform: [{ translateX: slideX }],
-                },
-              ]}
-            />
-          ) : null}
-          <Pressable onPress={() => setMode("do")} style={styles.segBtn}>
-            <Text
-              style={[styles.segText, mode === "do" && styles.segTextActive]}
-            >
-              ~하기
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => setMode("go")} style={styles.segBtn}>
-            <Text
-              style={[styles.segText, mode === "go" && styles.segTextActive]}
-            >
-              ~가기
-            </Text>
-          </Pressable>
-        </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboardView}
+        pointerEvents="box-none" // 배경 터치 이벤트를 통과시키기 위함
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.sheet}>
+            {/* iOS 스타일 드래그 핸들 */}
+            <View style={styles.dragHandle} />
 
-        <View style={styles.sentenceBox}>
-          {mode === "do" ? (
-            <View>
-              <View style={[styles.inputWrap, styles.inlineWide]}>
-                {!title ? (
-                  <Animated.Text
-                    pointerEvents="none"
-                    style={[
-                      styles.placeholderText,
-                      { transform: [{ translateY: todoY }] },
-                    ]}
-                    numberOfLines={1}
-                  >
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>새로운 목표</Text>
+              <Pressable onPress={() => router.back()} style={styles.closeBtn}>
+                <Text style={styles.closeBtnText}>닫기</Text>
+              </Pressable>
+            </View>
+
+            {/* 반응형 탭 컨테이너 */}
+            <View
+              style={styles.tabContainer}
+              onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+            >
+              {containerWidth > 0 && (
+                <Animated.View
+                  style={[
+                    styles.tabPill,
                     {
-                      todoPlaceholders[
-                        placeholderIndex % todoPlaceholders.length
-                      ]
-                    }
-                  </Animated.Text>
-                ) : null}
-                <TextInput
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder=""
-                  placeholderTextColor="#777"
-                  style={[styles.input, styles.inputNoBorder]}
-                  returnKeyType="done"
-                  onSubmitEditing={onAdd}
-                  autoFocus
+                      width: pillWidth,
+                      transform: [
+                        {
+                          translateX: slideX.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [padding, padding + pillWidth],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
                 />
-              </View>
-
-              <Text style={styles.word}>하기</Text>
-            </View>
-          ) : (
-            <View>
-              <View style={styles.sentenceRow}>
-                <View style={[styles.inputWrap, styles.inlineWide]}>
-                  {!place ? (
-                    <Animated.Text
-                      pointerEvents="none"
-                      style={[
-                        styles.placeholderText,
-                        { transform: [{ translateY: placeY }] },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {
-                        placePlaceholders[
-                          placeholderIndex % placePlaceholders.length
-                        ]
-                      }
-                    </Animated.Text>
-                  ) : null}
-                  <TextInput
-                    value={place}
-                    onChangeText={setPlace}
-                    placeholder=""
-                    placeholderTextColor="#777"
-                    style={[styles.input, styles.inputNoBorder]}
-                    returnKeyType="done"
-                    onSubmitEditing={onAdd}
-                    autoFocus
-                  />
-                </View>
-
-                <Pressable
-                  onPress={() => router.push("/map-picker")}
-                  style={styles.mapBtn}
+              )}
+              <Pressable onPress={() => setMode("do")} style={styles.tabBtn}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    mode === "do" && styles.tabTextActive,
+                  ]}
                 >
-                  <Text style={styles.mapBtnText}>위치</Text>
-                </Pressable>
+                  ~하기
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setMode("go")} style={styles.tabBtn}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    mode === "go" && styles.tabTextActive,
+                  ]}
+                >
+                  ~가기
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.inputSection}>
+              <View style={styles.sentenceCard}>
+                <View style={styles.inputRow}>
+                  <View style={styles.flexInput}>
+                    {((mode === "do" && !title) ||
+                      (mode === "go" && !place)) && (
+                      <Animated.Text
+                        style={[
+                          styles.fakePlaceholder,
+                          { transform: [{ translateY: placeholderY }] },
+                        ]}
+                      >
+                        {mode === "do"
+                          ? todoPlaceholders[placeholderIndex]
+                          : placePlaceholders[placeholderIndex]}
+                      </Animated.Text>
+                    )}
+                    <TextInput
+                      value={mode === "do" ? title : place}
+                      onChangeText={mode === "do" ? setTitle : setPlace}
+                      autoFocus
+                      style={styles.mainInput}
+                      returnKeyType="done"
+                      onSubmitEditing={() => Keyboard.dismiss()}
+                    />
+                  </View>
+                  {mode === "go" && (
+                    <AnimatedPressable
+                      onPress={() => router.push("/map-picker")}
+                      style={styles.mapBadge}
+                    >
+                      <Text style={styles.mapBadgeText}>📍 위치</Text>
+                    </AnimatedPressable>
+                  )}
+                  <Text style={styles.suffixPrimary}>
+                    {mode === "do" ? "하기" : "가기"}
+                  </Text>
+                </View>
               </View>
 
-              <Text style={[styles.word, { marginTop: 10 }]}>가기</Text>
+              {pickedCoord && (
+                <View style={styles.coordChip}>
+                  <Text style={styles.coordText}>
+                    📍 지정된 위치가 있습니다
+                  </Text>
+                  <Pressable onPress={() => setPickedCoord(null)}>
+                    <Text style={styles.coordDelete}>지우기</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
-          )}
-        </View>
 
-        {pickedCoord ? (
-          <View style={styles.placeChipRow}>
-            <View style={styles.placeChip}>
-              <Text style={styles.placeChipLabel}>좌표</Text>
-              <Text style={styles.placeChipText} numberOfLines={1}>
-                {pickedCoord.latitude.toFixed(6)},{" "}
-                {pickedCoord.longitude.toFixed(6)}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => setPickedCoord(null)}
-              style={styles.placeChipClear}
-            >
-              <Text style={styles.placeChipClearText}>지우기</Text>
-            </Pressable>
+            <AnimatedPressable onPress={onAdd} style={styles.submitBtn}>
+              <Text style={styles.submitBtnText}>목표 추가하기</Text>
+            </AnimatedPressable>
           </View>
-        ) : null}
-
-        <Text style={styles.hintText}>
-          {mode === "do"
-            ? title.trim()
-              ? `오늘은 ${
-                  place.trim() ? place.trim() + "에서 " : ""
-                }${title.trim()} 하기`
-              : "할 일을 입력해 주세요."
-            : place.trim()
-            ? `오늘은 ${place.trim()} 가기`
-            : "갈 곳을 입력해 주세요."}
-        </Text>
-
-        <View style={styles.btnRow}>
-          <Pressable
-            onPress={() => router.back()}
-            style={[styles.btn, styles.ghost]}
-          >
-            <Text style={styles.ghostText}>취소</Text>
-          </Pressable>
-          <Pressable onPress={onAdd} style={[styles.btn, styles.primary]}>
-            <Text style={styles.primaryText}>추가</Text>
-          </Pressable>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#0b0b0b",
-    justifyContent: "flex-start",
-    padding: 5,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
+  container: { flex: 1, justifyContent: "flex-end" },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
+  keyboardView: { width: "100%" },
   sheet: {
     backgroundColor: "#0b0b0b",
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 18,
-  },
-  sheetTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 12,
-  },
-  input: {
-    height: 48,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    backgroundColor: "#121212",
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 44 : 24,
     borderWidth: 1,
     borderColor: "#1f1f1f",
-    color: "#fff",
   },
-  inputWrap: {
-    position: "relative",
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#121212",
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
-    justifyContent: "center",
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#222",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
   },
-  inputNoBorder: {
-    height: 48,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    borderColor: "transparent",
-  },
-  placeholderText: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    color: "#777",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  btnRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ghost: { backgroundColor: "#111", borderWidth: 1, borderColor: "#2a2a2a" },
-  ghostText: { color: "#fff", fontWeight: "800" },
-  primary: { backgroundColor: "#fff" },
-  primaryText: { color: "#000", fontWeight: "900" },
-  fieldLabel: {
-    color: "#9aa0a6",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  mapBtn: {
-    height: 48,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    minWidth: 54,
-  },
-  mapBtnText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  sentenceBox: {
-    backgroundColor: "#0f0f0f",
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
-    borderRadius: 14,
-    padding: 12,
-    gap: 10,
-  },
-  word: {
-    marginTop: 10,
-    marginLeft: 5,
-    color: "#9aa0a6",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  sentenceRow: {
+  header: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
+    marginBottom: 24,
   },
-  inlineSmall: {
-    minWidth: 110,
-    flexGrow: 1,
-  },
-  inlineWide: {
-    minWidth: 160,
-    flexGrow: 2,
-  },
-  hintText: {
-    color: "#6f7377",
-    fontSize: 12,
-    marginTop: 10,
-  },
+  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  closeBtn: { padding: 8, backgroundColor: "#161616", borderRadius: 12 },
+  closeBtnText: { color: "#6f7377", fontSize: 13, fontWeight: "700" },
 
-  placeChipRow: {
+  tabContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-  },
-  placeChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
-  placeChipLabel: {
-    color: "#9aa0a6",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  placeChipText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  placeChipClear: {
-    height: 36,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  placeChipClearText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  segWrap: {
-    flexDirection: "row",
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    borderRadius: 999,
+    backgroundColor: "#161616",
     padding: 4,
-    gap: 6,
-    marginBottom: 12,
+    borderRadius: 20,
+    marginBottom: 32,
+    height: 48,
   },
-  segBtn: {
+  tabPill: {
+    position: "absolute",
+    height: 40,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    top: 4,
+  },
+  tabBtn: {
     flex: 1,
-    height: 34,
-    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 1,
   },
-  segBtnActive: {
-    backgroundColor: "#fff",
+  tabText: { color: "#6f7377", fontSize: 14, fontWeight: "800" },
+  tabTextActive: { color: "#000" },
+
+  inputSection: { marginBottom: 32 },
+  sentenceCard: {
+    backgroundColor: "#161616",
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#262626",
   },
-  segPill: {
+  inputRow: { flexDirection: "row", alignItems: "center" },
+  flexInput: { flex: 1, height: 40, justifyContent: "center" },
+  mainInput: { color: "#fff", fontSize: 24, fontWeight: "900" },
+  fakePlaceholder: {
     position: "absolute",
-    top: 4,
-    bottom: 4,
-    left: 4,
-    borderRadius: 999,
-    backgroundColor: "#fff",
-  },
-  segText: {
-    color: "#fff",
-    fontSize: 12,
+    color: "#333",
+    fontSize: 24,
     fontWeight: "900",
   },
-  segTextActive: {
-    color: "#000",
+  suffixPrimary: {
+    color: "#6366F1",
+    fontSize: 24,
+    fontWeight: "900",
+    marginLeft: 8,
   },
+  mapBadge: {
+    backgroundColor: "#312E81",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  mapBadgeText: { color: "#6366F1", fontSize: 12, fontWeight: "800" },
+  coordChip: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#161616",
+    padding: 14,
+    borderRadius: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#312E81",
+  },
+  coordText: { color: "#6366F1", fontSize: 13, fontWeight: "700" },
+  coordDelete: { color: "#ff4444", fontSize: 13, fontWeight: "800" },
+
+  submitBtn: {
+    backgroundColor: "#fff",
+    height: 56,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#fff",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  submitBtnText: { color: "#000", fontSize: 16, fontWeight: "900" },
 });

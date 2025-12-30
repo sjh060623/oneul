@@ -1,7 +1,7 @@
 {
   "name": "oneul",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -9,8 +9,9 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/vector-icons": "^15.0.2",
+    "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.10",
     "expo-av": "~16.0.7",

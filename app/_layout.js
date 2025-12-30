@@ -14,8 +14,10 @@ export default function RootLayout() {
           <Stack.Screen
             name="add-goal"
             options={{
-              presentation: "modal",
+              presentation: "transparentModal",
               animation: "slide_from_bottom",
+              headerShown: false,
+              contentStyle: { backgroundColor: "transparent" },
             }}
           />
         </Stack>

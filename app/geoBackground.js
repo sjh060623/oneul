@@ -246,11 +246,9 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
         trigger: null,
       });
 
-      // ✅ 도착하면: goals -> records 로 이동 (홈에서 사라짐)
       await moveGoalToRecordsById(goalId);
       await removeGoalById(goalId);
 
-      // 상태는 inside로 업데이트(중복 방지)
       const nextGoals = { ...(state.goals || {}), [goalId]: true };
       await setGeofenceState({ ...state, goals: nextGoals });
       return;

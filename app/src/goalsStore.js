@@ -8,9 +8,11 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState } from "react-native";
-const ACTIVE_KEY = "GOALS_V1"; // geoBackground.j
+
+const ACTIVE_KEY = "GOALS_V1";
 const RECORDS_KEY = "GOAL_RECORDS_V1";
+const DAILY_PREF_KEY = "DAILY_PREF_V1";
+const UNACHIEVED_KEY = "UNACHIEVED_STATS_V1"; // 미달성 기록용 키 추가
 
 const GoalsCtx = createContext(null);
 
@@ -20,8 +22,6 @@ function uid() {
 
 function normalizeGoal(input) {
   const now = Date.now();
-
-  // string
   if (typeof input === "string" || typeof input === "number") {
     const t = String(input || "").trim();
     if (!t) return null;
@@ -35,12 +35,9 @@ function normalizeGoal(input) {
       createdAt: now,
     };
   }
-
   if (!input || typeof input !== "object") return null;
-
   const text = String(input.text ?? "").trim();
   if (!text) return null;
-
   const coord =
     input.coord &&
     Number.isFinite(Number(input.coord.latitude)) &&
@@ -50,7 +47,6 @@ function normalizeGoal(input) {
           longitude: Number(input.coord.longitude),
         }
       : null;
-
   return {
     id: String(input.id ?? uid()),
     text,
@@ -64,77 +60,46 @@ function normalizeGoal(input) {
 
 function dateKeyFrom(ts) {
   const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function GoalsProvider({ children }) {
-  const [goals, setGoals] = useState([]); // active(미완료)
-  const [records, setRecords] = useState([]); // 완료 기록
+  const [goals, setGoals] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [reminderTime, setReminderTimeState] = useState("09:00");
+  const [unachievedStats, setUnachievedStats] = useState({}); // { "YYYY-MM-DD" }
   const hydratedRef = useRef(false);
 
-  // boot
+  // 초기 로딩
   useEffect(() => {
     let mounted = true;
-
     const boot = async () => {
       try {
-        const [rawGoals, rawRecords] = await Promise.all([
+        const [rawGoals, rawRecords, rawPref, rawStats] = await Promise.all([
           AsyncStorage.getItem(ACTIVE_KEY),
           AsyncStorage.getItem(RECORDS_KEY),
+          AsyncStorage.getItem(DAILY_PREF_KEY),
+          AsyncStorage.getItem(UNACHIEVED_KEY),
         ]);
 
         if (!mounted) return;
 
+        if (rawStats) setUnachievedStats(JSON.parse(rawStats));
+        if (rawPref) {
+          const pref = JSON.parse(rawPref);
+          setReminderTimeState(pref.timeHHMM || "09:00");
+        }
+
         const g = rawGoals ? JSON.parse(rawGoals) : [];
         const r = rawRecords ? JSON.parse(rawRecords) : [];
 
-        const goalsArr = Array.isArray(g) ? g : [];
-        const recordsArr = Array.isArray(r) ? r : [];
-
-        const nextGoals = [];
-        const moved = [];
-        for (const item of goalsArr) {
-          if (item && item.done === true) {
-            moved.push({
-              id: String(item.id ?? uid()),
-              text: String(item.text ?? item.title ?? "").trim(),
-              type: String(item.type ?? "legacy"),
-              place: String(item.place ?? ""),
-              title: String(item.title ?? ""),
-              coord: item.coord ?? null,
-              createdAt: Number(item.createdAt ?? Date.now()),
-              completedAt: Date.now(),
-              dateKey: dateKeyFrom(Date.now()),
-              memo: String(item.memo ?? ""),
-              photoUri: String(item.photoUri ?? ""),
-            });
-          } else {
-            const ng = normalizeGoal(item);
-            if (ng) nextGoals.push(ng);
-          }
-        }
-
-        const nextRecords = [
-          ...moved,
-          ...recordsArr.map((x) => ({
-            id: String(x.id ?? uid()),
-            text: String(x.text ?? "").trim(),
-            type: String(x.type ?? "legacy"),
-            place: String(x.place ?? ""),
-            title: String(x.title ?? ""),
-            coord: x.coord ?? null,
-            createdAt: Number(x.createdAt ?? Date.now()),
-            completedAt: Number(x.completedAt ?? Date.now()),
-            dateKey: String(
-              x.dateKey ?? dateKeyFrom(x.completedAt ?? Date.now())
-            ),
-            memo: String(x.memo ?? ""),
-            photoUri: String(x.photoUri ?? ""),
-          })),
-        ].filter((x) => x.text);
+        const nextGoals = Array.isArray(g)
+          ? g.map(normalizeGoal).filter(Boolean)
+          : [];
+        const nextRecords = Array.isArray(r) ? r.filter((x) => x.text) : [];
 
         setGoals(nextGoals);
         setRecords(nextRecords);
@@ -147,78 +112,26 @@ export function GoalsProvider({ children }) {
         hydratedRef.current = true;
       }
     };
-
     boot();
     return () => {
       mounted = false;
     };
   }, []);
-  const lastGoalsRawRef = useRef(null);
-  const lastRecordsRawRef = useRef(null);
 
-  const reloadFromStorage = async () => {
+  const setReminderTime = async (timeHHMM) => {
+    setReminderTimeState(timeHHMM);
     try {
-      const [rawGoals, rawRecords] = await Promise.all([
-        AsyncStorage.getItem(ACTIVE_KEY),
-        AsyncStorage.getItem(RECORDS_KEY),
-      ]);
-
-      if (
-        rawGoals === lastGoalsRawRef.current &&
-        rawRecords === lastRecordsRawRef.current
-      ) {
-        return;
-      }
-      lastGoalsRawRef.current = rawGoals;
-      lastRecordsRawRef.current = rawRecords;
-
-      const g = rawGoals ? JSON.parse(rawGoals) : [];
-      const r = rawRecords ? JSON.parse(rawRecords) : [];
-
-      const nextGoals = Array.isArray(g)
-        ? g.map(normalizeGoal).filter(Boolean)
-        : [];
-      const nextRecords = Array.isArray(r)
-        ? r
-            .map((x) => ({
-              id: String(x.id ?? uid()),
-              text: String(x.text ?? "").trim(),
-              type: String(x.type ?? "legacy"),
-              place: String(x.place ?? ""),
-              title: String(x.title ?? ""),
-              coord: x.coord ?? null,
-              createdAt: Number(x.createdAt ?? Date.now()),
-              completedAt: Number(x.completedAt ?? Date.now()),
-              dateKey: String(
-                x.dateKey ?? dateKeyFrom(x.completedAt ?? Date.now())
-              ),
-              memo: String(x.memo ?? ""),
-              photoUri: String(x.photoUri ?? ""),
-            }))
-            .filter((x) => x.text)
-        : [];
-
-      setGoals(nextGoals);
-      setRecords(nextRecords);
-    } catch {
-      // ignore
-    }
+      await AsyncStorage.setItem(DAILY_PREF_KEY, JSON.stringify({ timeHHMM }));
+    } catch {}
   };
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      reloadFromStorage();
-    }, 1200);
-    return () => clearInterval(t);
-  }, []);
+  const loadSettings = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(DAILY_PREF_KEY);
+      if (raw) setReminderTimeState(JSON.parse(raw).timeHHMM);
+    } catch {}
+  };
 
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") reloadFromStorage();
-    });
-    return () => sub.remove();
-  }, []);
-  // persist
   useEffect(() => {
     if (!hydratedRef.current) return;
     AsyncStorage.setItem(ACTIVE_KEY, JSON.stringify(goals)).catch(() => {});
@@ -229,82 +142,88 @@ export function GoalsProvider({ children }) {
     AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records)).catch(() => {});
   }, [records]);
 
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    AsyncStorage.setItem(UNACHIEVED_KEY, JSON.stringify(unachievedStats)).catch(
+      () => {}
+    );
+  }, [unachievedStats]);
+
   const api = useMemo(() => {
+    const clearPreviousDaysGoals = () => {
+      const now = new Date();
+      const startOfToday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      ).getTime();
+
+      setGoals((prev) => {
+        const toDelete = prev.filter((g) => g.createdAt < startOfToday);
+
+        if (toDelete.length > 0) {
+          const newStats = { ...unachievedStats };
+          toDelete.forEach((g) => {
+            const dKey = dateKeyFrom(g.createdAt);
+            newStats[dKey] = (newStats[dKey] || 0) + 1;
+          });
+          setUnachievedStats(newStats);
+        }
+
+        //
+        return prev.filter((g) => g.createdAt >= startOfToday);
+      });
+    };
+
     const addGoal = (goalLike) => {
       const g = normalizeGoal(goalLike);
-      if (!g) return;
-      setGoals((prev) => [g, ...prev]);
+      if (g) setGoals((prev) => [g, ...prev]);
     };
 
     const completeGoal = (id) => {
       setGoals((prev) => {
         const found = prev.find((g) => g.id === id);
         if (!found) return prev;
-
         const now = Date.now();
         const rec = {
-          id: found.id,
-          text: found.text,
-          type: found.type,
-          place: found.place,
-          title: found.title,
-          coord: found.coord,
-          createdAt: found.createdAt,
+          ...found,
           completedAt: now,
           dateKey: dateKeyFrom(now),
           memo: "",
           photoUri: "",
         };
-
         setRecords((rprev) => [rec, ...rprev]);
-
         return prev.filter((g) => g.id !== id);
       });
-    };
-
-    const removeGoal = (id) => {
-      setGoals((prev) => prev.filter((g) => g.id !== id));
-    };
-
-    const updateRecord = (id, patch = {}) => {
-      setRecords((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                memo: patch.memo !== undefined ? String(patch.memo) : r.memo,
-                photoUri:
-                  patch.photoUri !== undefined
-                    ? String(patch.photoUri || "")
-                    : r.photoUri,
-              }
-            : r
-        )
-      );
-    };
-
-    const removeRecord = (id) => {
-      setRecords((prev) => prev.filter((r) => r.id !== id));
-    };
-
-    const clearAll = () => {
-      setGoals([]);
-      setRecords([]);
     };
 
     return {
       goals,
       records,
+      reminderTime,
+      unachievedStats, // 추가
+      setReminderTime,
+      clearPreviousDaysGoals, // 수정됨
+      loadSettings,
       addGoal,
       completeGoal,
-      removeGoal,
-      updateRecord,
-      removeRecord,
-      clearAll,
+      removeGoal: (id) => setGoals((prev) => prev.filter((g) => g.id !== id)),
+      updateRecord: (id, patch = {}) => {
+        setRecords((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
+        );
+      },
+      removeRecord: (id) =>
+        setRecords((prev) => prev.filter((r) => r.id !== id)),
+      clearAll: () => {
+        setGoals([]);
+        setRecords([]);
+        setUnachievedStats({});
+      },
       setGoals,
       setRecords,
     };
-  }, [goals, records]);
+  }, [goals, records, reminderTime, unachievedStats]);
 
   return <GoalsCtx.Provider value={api}>{children}</GoalsCtx.Provider>;
 }

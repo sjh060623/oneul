@@ -4,16 +4,22 @@ import {
   Alert,
   Animated,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useGoals } from "../src/goalsStore";
+
+// 유틸리티 함수들 (동일)
 function groupByDate(records) {
   const arr = Array.isArray(records) ? records : [];
   const map = new Map();
@@ -40,22 +46,49 @@ function buildMonthGrid(date) {
   const startDow = first.getDay();
   const last = new Date(y, m + 1, 0);
   const daysInMonth = last.getDate();
-
   const cells = [];
   for (let i = 0; i < startDow; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, m, d));
   while (cells.length % 7 !== 0) cells.push(null);
-
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   return weeks;
 }
 
-export default function RecordScreen() {
-  const { records, updateRecord, removeRecord } = useGoals();
+const AnimatedPressable = ({ children, onPress, onLongPress, style }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const onPressIn = () =>
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
+  const onPressOut = () =>
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={style}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+};
 
-  const [tab, setTab] = useState("calendar"); // calendar list
-  const slide = useRef(new Animated.Value(0)).current; // 0 or 1
+export default function RecordScreen() {
+  const { records, unachievedStats, updateRecord, removeRecord } = useGoals();
+  const [tab, setTab] = useState("calendar");
+  const slide = useRef(new Animated.Value(0)).current;
+
+  // ✅ 반응형 탭 너비 계산용 상태
+  const [containerWidth, setContainerWidth] = useState(0);
+  const padding = 4; // tabsOuter의 padding 값
+  const pillWidth = (containerWidth - padding * 2) / 2;
 
   useEffect(() => {
     Animated.spring(slide, {
@@ -63,14 +96,11 @@ export default function RecordScreen() {
       useNativeDriver: true,
       damping: 18,
       stiffness: 220,
-      mass: 0.9,
     }).start();
   }, [tab]);
 
-  // 캘린더 선택 날짜
   const [pickedDate, setPickedDate] = useState(() => new Date());
   const pickedKey = useMemo(() => fmtDateKey(pickedDate), [pickedDate]);
-
   const sections = useMemo(() => groupByDate(records), [records]);
   const recordCountByDate = useMemo(() => {
     const map = new Map();
@@ -83,7 +113,7 @@ export default function RecordScreen() {
     return hit ? hit.items : [];
   }, [sections, pickedKey]);
 
-  // 모달
+  // 모달 상태
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [memo, setMemo] = useState("");
@@ -99,62 +129,41 @@ export default function RecordScreen() {
   const closeModal = () => {
     setOpen(false);
     setSelected(null);
-    setMemo("");
-    setPhotoUri("");
   };
 
   const confirmDelete = (rec) => {
-    Alert.alert(
-      "기록 삭제",
-      "이 기록을 삭제할까요?",
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: () => {
-            removeRecord(rec.id);
-            // 혹시 모달이 열려있던 아이템이면 닫기
-            if (selected?.id === rec.id) closeModal();
-          },
+    Alert.alert("기록 삭제", "이 소중한 기록을 삭제할까요?", [
+      { text: "취소", style: "cancel" },
+      {
+        text: "삭제",
+        style: "destructive",
+        onPress: () => {
+          removeRecord(rec.id);
+          if (selected?.id === rec.id) closeModal();
         },
-      ],
-      { cancelable: true }
-    );
+      },
+    ]);
   };
+
   const pickPhoto = async () => {
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (perm.status !== "granted") return;
-
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-      });
-
-      if (res.canceled) return;
-      const uri = res.assets?.[0]?.uri;
-      if (uri) setPhotoUri(uri);
-    } catch {}
+    let res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!res.canceled) setPhotoUri(res.assets[0].uri);
   };
+
   const takePhoto = async () => {
-    try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (perm.status !== "granted") return;
-
-      const res = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-      });
-
-      if (res.canceled) return;
-      const uri = res.assets?.[0]?.uri;
-      if (uri) setPhotoUri(uri);
-    } catch {}
+    let res = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!res.canceled) setPhotoUri(res.assets[0].uri);
   };
+
   const save = () => {
     if (!selected) return;
     updateRecord(selected.id, { memo, photoUri });
@@ -163,55 +172,54 @@ export default function RecordScreen() {
 
   const weeks = useMemo(() => buildMonthGrid(pickedDate), [pickedDate]);
 
-  const indicatorX = slide.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <Text style={styles.title}>기록</Text>
+      <Text style={styles.title}>활동 기록</Text>
 
-      {/* 탭 */}
-      <View style={styles.tabsWrap}>
-        <View style={styles.tabsOuter}>
+      {/* 탭  */}
+      <View
+        style={styles.tabsOuter}
+        onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+      >
+        {containerWidth > 0 && (
           <Animated.View
             style={[
               styles.tabsPill,
               {
+                width: pillWidth,
                 transform: [
                   {
-                    translateX: indicatorX.interpolate({
+                    translateX: slide.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, 180],
+                      outputRange: [padding, padding + pillWidth],
                     }),
                   },
                 ],
               },
             ]}
           />
-          <Pressable onPress={() => setTab("calendar")} style={styles.tabBtn}>
-            <Text
-              style={[styles.tabText, tab === "calendar" && styles.tabTextOn]}
-            >
-              캘린더
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => setTab("list")} style={styles.tabBtn}>
-            <Text style={[styles.tabText, tab === "list" && styles.tabTextOn]}>
-              리스트
-            </Text>
-          </Pressable>
-        </View>
+        )}
+        <Pressable onPress={() => setTab("calendar")} style={styles.tabBtn}>
+          <Text
+            style={[styles.tabText, tab === "calendar" && styles.tabTextOn]}
+          >
+            캘린더
+          </Text>
+        </Pressable>
+        <Pressable onPress={() => setTab("list")} style={styles.tabBtn}>
+          <Text style={[styles.tabText, tab === "list" && styles.tabTextOn]}>
+            리스트
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 140 }}
         showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
       >
         {tab === "calendar" ? (
-          <View style={styles.card}>
+          <View style={styles.calendarCard}>
+            {/* ... 캘린더 내부 로직 동일 ... */}
             <View style={styles.calHeader}>
               <Pressable
                 onPress={() =>
@@ -265,45 +273,62 @@ export default function RecordScreen() {
                       key={di}
                       disabled={!d}
                       onPress={() => d && setPickedDate(d)}
-                      style={[
-                        styles.dayCell,
-                        isPicked && styles.dayCellOn,
-                        !d && styles.dayCellEmpty,
-                      ]}
+                      style={[styles.dayCell, isPicked && styles.dayCellOn]}
                     >
                       <Text
                         style={[styles.dayText, isPicked && styles.dayTextOn]}
                       >
                         {d ? d.getDate() : ""}
                       </Text>
-                      {has ? <View style={styles.dot} /> : null}
+                      {has ? (
+                        <View
+                          style={[
+                            styles.dot,
+                            isPicked && { backgroundColor: "#000" },
+                          ]}
+                        />
+                      ) : null}
                     </Pressable>
                   );
                 })}
               </View>
             ))}
 
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.sectionTitle}>{pickedKey}</Text>
+            <View style={styles.detailSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{pickedKey}</Text>
+                <View style={styles.statRow}>
+                  <View style={styles.statBadge}>
+                    <Text style={styles.statSuccess}>
+                      달성 {daySections.length}
+                    </Text>
+                  </View>
+                  <View style={styles.statBadge}>
+                    <Text style={styles.statFail}>
+                      미달성 {unachievedStats[pickedKey] || 0}
+                    </Text>
+                  </View>
+                </View>
+              </View>
 
               {daySections.length === 0 ? (
-                <Text style={styles.emptySub}>
-                  이 날짜에는 완료 기록이 없어요.
-                </Text>
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptySub}>기록된 활동이 없습니다.</Text>
+                </View>
               ) : (
                 daySections.map((r, idx) => (
-                  <Pressable
+                  <AnimatedPressable
                     key={r.id}
                     onPress={() => openModal(r)}
                     onLongPress={() => confirmDelete(r)}
-                    style={[styles.itemRow, idx === 0 && { borderTopWidth: 0 }]}
+                    style={[styles.itemRow, idx == 0 && styles.itemRowFirst]}
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.itemText} numberOfLines={1}>
                         {r.text}
                       </Text>
                       <Text style={styles.itemSub} numberOfLines={1}>
-                        {r.memo ? r.memo : "소감/사진 추가하기"}
+                        {r.memo || "추억을 기록해보세요"}
                       </Text>
                     </View>
                     {r.photoUri ? (
@@ -312,355 +337,349 @@ export default function RecordScreen() {
                         style={styles.thumb}
                       />
                     ) : (
-                      <View style={styles.thumbPh} />
+                      <View style={styles.thumbPh}>
+                        <Text style={{ fontSize: 10 }}>📷</Text>
+                      </View>
                     )}
-                  </Pressable>
+                  </AnimatedPressable>
                 ))
               )}
             </View>
           </View>
         ) : (
-          <>
-            {sections.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>아직 기록이 없어요</Text>
-                <Text style={styles.emptySub}>
-                  홈에서 목표를 완료하면 여기에 쌓여요.
-                </Text>
-              </View>
-            ) : (
-              sections.map((sec) => (
-                <View key={sec.dateKey} style={{ marginTop: 12 }}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>{sec.dateKey}</Text>
-                    <Text style={styles.sectionCount}>{sec.items.length}</Text>
-                  </View>
-
-                  <View style={styles.card}>
-                    {sec.items.map((r, idx) => (
-                      <Pressable
-                        key={r.id}
-                        onPress={() => openModal(r)}
-                        onLongPress={() => confirmDelete(r)}
-                        style={[
-                          styles.itemRow,
-                          idx === 0 && { borderTopWidth: 0 },
-                        ]}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemText} numberOfLines={1}>
-                            {r.text}
-                          </Text>
-                          <Text style={styles.itemSub} numberOfLines={1}>
-                            {r.memo ? r.memo : "소감/사진 추가하기"}
-                          </Text>
-                        </View>
-                        {r.photoUri ? (
-                          <Image
-                            source={{ uri: r.photoUri }}
-                            style={styles.thumb}
-                          />
-                        ) : (
-                          <View style={styles.thumbPh} />
-                        )}
-                      </Pressable>
-                    ))}
-                  </View>
+          /* 리스트 탭 */
+          sections.map((sec) => (
+            <View key={sec.dateKey} style={{ marginTop: 20 }}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{sec.dateKey}</Text>
+                <View style={styles.statRow}>
+                  <Text style={styles.statSuccess}>
+                    달성 {sec.items.length}
+                  </Text>
+                  <Text style={styles.statFail}>
+                    미달성 {unachievedStats[sec.dateKey] || 0}
+                  </Text>
                 </View>
-              ))
-            )}
-          </>
+              </View>
+              <View style={styles.calendarCard}>
+                {sec.items.map((r, idx) => (
+                  <AnimatedPressable
+                    key={r.id}
+                    onPress={() => openModal(r)}
+                    onLongPress={() => confirmDelete(r)}
+                    style={[styles.itemRow, idx == 0 && styles.itemRowFirst]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemText}>{r.text}</Text>
+                      <Text style={styles.itemSub}>
+                        {r.memo || "기록 없음"}
+                      </Text>
+                    </View>
+                    {r.photoUri && (
+                      <Image
+                        source={{ uri: r.photoUri }}
+                        style={styles.thumb}
+                      />
+                    )}
+                  </AnimatedPressable>
+                ))}
+              </View>
+            </View>
+          ))
         )}
       </ScrollView>
 
-      {/* modal */}
+      {/* 모달 */}
       <Modal
         visible={open}
         transparent
         animationType="slide"
         onRequestClose={closeModal}
       >
-        <View style={styles.modalBack}>
-          <Pressable style={{ flex: 1 }} onPress={closeModal} />
-          <View style={styles.sheet}>
-            <View style={styles.sheetTop}>
-              <Text style={styles.sheetTitle}>기록</Text>
-              <Pressable onPress={closeModal} style={styles.sheetClose}>
-                <Text style={styles.sheetCloseText}>닫기</Text>
-              </Pressable>
-            </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalBack}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={{ width: "100%" }}
+            >
+              <View style={styles.sheet}>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>활동 상세</Text>
+                  <Pressable onPress={closeModal} style={styles.sheetCloseBtn}>
+                    <Text style={styles.sheetCloseText}>닫기</Text>
+                  </Pressable>
+                </View>
 
-            <Text style={styles.sheetGoal} numberOfLines={2}>
-              {selected?.text || ""}
-            </Text>
+                <Text style={styles.sheetGoalText}>{selected?.text}</Text>
 
-            <Text style={styles.label}>사진</Text>
+                <Text style={styles.label}>사진 기록</Text>
+                <View style={styles.photoActionRow}>
+                  <Pressable onPress={pickPhoto} style={styles.actionBtn}>
+                    <Text style={styles.actionBtnText}>앨범</Text>
+                  </Pressable>
+                  <Pressable onPress={takePhoto} style={styles.actionBtn}>
+                    <Text style={styles.actionBtnText}>카메라</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setPhotoUri("")}
+                    style={[styles.actionBtn, { borderColor: "#331a1a" }]}
+                  >
+                    <Text style={[styles.actionBtnText, { color: "#ff4444" }]}>
+                      삭제
+                    </Text>
+                  </Pressable>
+                </View>
 
-            <View style={styles.photoRow}>
-              <Pressable onPress={pickPhoto} style={styles.btnGhost}>
-                <Text style={styles.btnGhostText}>앨범</Text>
-              </Pressable>
+                {photoUri ? (
+                  <Image
+                    source={{ uri: photoUri }}
+                    style={styles.photoPreview}
+                  />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Text style={{ color: "#333" }}>사진을 등록해보세요</Text>
+                  </View>
+                )}
 
-              <Pressable onPress={takePhoto} style={styles.btnGhost}>
-                <Text style={styles.btnGhostText}>카메라</Text>
-              </Pressable>
+                <Text style={styles.label}>오늘의 소감</Text>
+                <TextInput
+                  value={memo}
+                  onChangeText={setMemo}
+                  placeholder="무엇을 느끼셨나요?"
+                  placeholderTextColor="#444"
+                  style={styles.memoInput}
+                  returnKeyType="done"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                />
 
-              <Pressable
-                onPress={() => setPhotoUri("")}
-                style={styles.btnGhost}
-              >
-                <Text style={styles.btnGhostText}>삭제</Text>
-              </Pressable>
-            </View>
-
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.preview} />
-            ) : null}
-
-            <Text style={styles.label}>소감</Text>
-            <TextInput
-              value={memo}
-              onChangeText={setMemo}
-              placeholder="짧게 적어도 됨"
-              placeholderTextColor="#666"
-              multiline
-              style={styles.memo}
-            />
-
-            <Pressable onPress={save} style={styles.btnPrimary}>
-              <Text style={styles.btnPrimaryText}>저장</Text>
-            </Pressable>
+                <Pressable onPress={save} style={styles.saveBtn}>
+                  <Text style={styles.saveBtnText}>저장하기</Text>
+                </Pressable>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#000", paddingHorizontal: 16 },
+  screen: { flex: 1, backgroundColor: "#000", paddingHorizontal: 20 },
   title: {
     color: "#fff",
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "900",
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 20,
+    marginBottom: 20,
   },
-  tabsWrap: { marginBottom: 10 },
+
   tabsOuter: {
-    height: 44,
-    borderRadius: 999,
-    backgroundColor: "#121212",
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
+    height: 48,
+    borderRadius: 20,
+    backgroundColor: "#161616",
+    padding: 4, // 이 값이 padding 변수와 일치해야 함
     flexDirection: "row",
-    position: "relative",
-    overflow: "hidden",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#262626",
+    width: "100%",
   },
   tabsPill: {
     position: "absolute",
-    left: 2,
-    top: 2,
-    bottom: 2,
-    width: 180,
-    borderRadius: 999,
+    height: 40,
+    borderRadius: 16,
     backgroundColor: "#fff",
+    top: 3,
   },
-  tabBtn: { width: 180, alignItems: "center", justifyContent: "center" },
-  tabText: { color: "#6f7377", fontSize: 13, fontWeight: "900" },
+  tabBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  tabText: { color: "#6f7377", fontSize: 14, fontWeight: "800" },
   tabTextOn: { color: "#000" },
 
-  emptyCard: {
-    backgroundColor: "#121212",
-    borderRadius: 18,
-    padding: 16,
+  calendarCard: {
+    backgroundColor: "#161616",
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "#1f1f1f",
+    borderColor: "#262626",
   },
-  emptyTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  emptySub: { color: "#6f7377", fontSize: 12, marginTop: 8, fontWeight: "800" },
+  calHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  calTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  calNav: {
+    width: 40,
+    height: 40,
+    backgroundColor: "#262626",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calNavText: { color: "#fff", fontSize: 12 },
+  dowRow: { flexDirection: "row", marginBottom: 10 },
+  dowText: {
+    flex: 1,
+    textAlign: "center",
+    color: "#6f7377",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  weekRow: { flexDirection: "row" },
+  dayCell: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    margin: 2,
+  },
+  dayCellOn: { backgroundColor: "#fff" },
+  dayText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  dayTextOn: { color: "#000" },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#6366F1",
+    marginTop: 4,
+  },
 
+  detailSection: { marginTop: 24 },
   sectionHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    alignItems: "center",
+    marginBottom: 12,
   },
-  sectionTitle: { color: "#fff", fontSize: 14, fontWeight: "900" },
-  sectionCount: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
-    backgroundColor: "#1f1f1f",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  card: {
-    backgroundColor: "#121212",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
-    overflow: "hidden",
-    padding: 14,
-  },
+  sectionTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  statRow: { flexDirection: "row", gap: 8 },
+  statSuccess: { color: "#6366F1", fontSize: 11, fontWeight: "900" },
+  statFail: { color: "#ff4444", fontSize: 11, fontWeight: "900" },
 
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: "#1f1f1f",
+    borderTopColor: "#262626",
   },
-  itemText: { color: "#fff", fontSize: 13, fontWeight: "900" },
-  itemSub: { color: "#6f7377", fontSize: 12, marginTop: 4, fontWeight: "800" },
-  thumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#222" },
+  itemRowFirst: { borderTopWidth: 0 },
+  itemText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  itemSub: { color: "#6f7377", fontSize: 12, marginTop: 4, fontWeight: "600" },
+  thumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#262626",
+  },
   thumbPh: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: 12,
-    backgroundColor: "#0f0f0f",
+    backgroundColor: "#0b0b0b",
+    borderStyle: "dashed",
     borderWidth: 1,
-    borderColor: "#1f1f1f",
-  },
-  photoRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  btnGhost: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
+    borderColor: "#262626",
     alignItems: "center",
     justifyContent: "center",
-  },
-  btnGhostText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-
-  // calendar
-  calHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  calTitle: { color: "#fff", fontSize: 14, fontWeight: "900" },
-  calNav: {
-    width: 38,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  calNavText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  dowRow: { flexDirection: "row", marginBottom: 6 },
-  dowText: {
-    width: "14.2857%",
-    textAlign: "center",
-    color: "#6f7377",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  weekRow: { flexDirection: "row" },
-  dayCell: {
-    width: "14.2857%",
-    aspectRatio: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    marginVertical: 2,
-  },
-  dayCellEmpty: { opacity: 0.25 },
-  dayCellOn: { backgroundColor: "#fff" },
-  dayText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  dayTextOn: { color: "#000" },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 6,
-    backgroundColor: "#fff",
-    marginTop: 6,
   },
 
-  // modal
+  emptyBox: { paddingVertical: 20, alignItems: "center" },
+  emptySub: { color: "#444", fontSize: 13, fontWeight: "700" },
+
   modalBack: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.85)",
     justifyContent: "flex-end",
   },
   sheet: {
     backgroundColor: "#0b0b0b",
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingBottom: Platform.OS === "ios" ? 44 : 24,
     borderWidth: 1,
     borderColor: "#1f1f1f",
-    padding: 16,
   },
-  sheetTop: {
+  sheetHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
   },
-  sheetTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  sheetClose: {
-    height: 34,
-    paddingHorizontal: 12,
+  sheetTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  sheetCloseBtn: { padding: 8, backgroundColor: "#161616", borderRadius: 12 },
+  sheetCloseText: { color: "#6f7377", fontSize: 13, fontWeight: "700" },
+  sheetGoalText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 20,
+  },
+
+  label: {
+    color: "#6f7377",
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  photoActionRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  actionBtn: {
+    flex: 1,
+    height: 44,
+    backgroundColor: "#161616",
     borderRadius: 12,
-    backgroundColor: "#111",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
     alignItems: "center",
     justifyContent: "center",
-  },
-  sheetCloseText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  sheetGoal: { color: "#fff", fontSize: 14, fontWeight: "900", marginTop: 10 },
-
-  label: { color: "#9aa0a6", fontSize: 12, fontWeight: "900", marginTop: 12 },
-  input: {
-    marginTop: 8,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "#111",
     borderWidth: 1,
-    borderColor: "#2a2a2a",
-    color: "#fff",
-    paddingHorizontal: 12,
-    fontSize: 13,
-    fontWeight: "800",
+    borderColor: "#262626",
   },
-  preview: {
+  actionBtnText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  photoPreview: {
     width: "100%",
-    height: 180,
+    height: 200,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  photoPlaceholder: {
+    width: "100%",
+    height: 80,
+    backgroundColor: "#0f0f0f",
     borderRadius: 16,
-    marginTop: 12,
-    backgroundColor: "#111",
-  },
-  memo: {
-    marginTop: 8,
-    minHeight: 110,
-    borderRadius: 14,
-    backgroundColor: "#111",
+    borderStyle: "dashed",
     borderWidth: 1,
-    borderColor: "#2a2a2a",
-    color: "#fff",
-    padding: 12,
-    fontSize: 13,
-    fontWeight: "800",
+    borderColor: "#262626",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
   },
-
-  btnPrimary: {
-    marginTop: 12,
-    height: 48,
-    borderRadius: 14,
+  memoInput: {
+    minHeight: 100,
+    backgroundColor: "#161616",
+    borderRadius: 16,
+    padding: 16,
+    color: "#fff",
+    fontSize: 14,
+    textAlignVertical: "top",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#262626",
+  },
+  saveBtn: {
+    height: 56,
     backgroundColor: "#fff",
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnPrimaryText: { color: "#000", fontSize: 13, fontWeight: "900" },
+  saveBtnText: { color: "#000", fontSize: 16, fontWeight: "900" },
 });

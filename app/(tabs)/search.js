@@ -1,4 +1,3 @@
-// app/(tabs)/search.js
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,7 +7,7 @@ export default function Search() {
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <View style={styles.container}>
         <Text style={styles.title}>검색</Text>
-        <Text style={styles.subtitle}>검색 기능이 곧 추가될 예정입니다</Text>
+        <Text style={styles.subtitle}>검색 기능이 곧 추가될 예정이예요</Text>
       </View>
     </SafeAreaView>
   );
@@ -37,4 +36,3 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
-
