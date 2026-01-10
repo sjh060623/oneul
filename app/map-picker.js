@@ -1,4 +1,3 @@
-// app/map-picker.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import * as Location from "expo-location";
@@ -81,8 +80,6 @@ export default function MapPicker() {
         const lat = Number(c.latitude).toFixed(6);
         const lng = Number(c.longitude).toFixed(6);
         setPlace(`${lat}, ${lng}`);
-
-        // 한번 쓰면 지워서 다음 포커스 때 또 안 들어오게
         await AsyncStorage.removeItem(PICK_KEY);
       } catch {
         // ignore

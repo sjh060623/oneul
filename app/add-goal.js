@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { useGoals } from "./src/goalsStore";
 
-// 1. 인터랙티브 버튼 컴포넌트 (전체 영역 터치 가능하도록 개선)
 const AnimatedPressable = ({ children, onPress, style, disabled }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const onPressIn = () =>
@@ -57,17 +56,15 @@ export default function AddGoalModal() {
   const [pickedCoord, setPickedCoord] = useState(null);
   const isFocused = useIsFocused();
 
-  // 탭 반응형 계산 상태
   const [containerWidth, setContainerWidth] = useState(0);
   const padding = 4;
   const pillWidth = (containerWidth - padding * 2) / 2;
 
-  const [mode, setMode] = useState("do"); // "do" (~하기), "go" (~가기)
+  const [mode, setMode] = useState("do");
   const slideX = useRef(new Animated.Value(0)).current;
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const placeholderY = useRef(new Animated.Value(0)).current;
 
-  // 데이터 로딩 및 애니메이션 로직
   useEffect(() => {
     if (!isFocused) return;
     const pullPicked = async () => {
@@ -154,17 +151,15 @@ export default function AddGoalModal() {
 
   return (
     <View style={styles.container}>
-      {/* 2. 배경 터치 영역: 시트 밖을 누르면 모달 닫힘 */}
       <Pressable style={styles.backdrop} onPress={() => router.back()} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.keyboardView}
-        pointerEvents="box-none" // 배경 터치 이벤트를 통과시키기 위함
+        pointerEvents="box-none"
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.sheet}>
-            {/* iOS 스타일 드래그 핸들 */}
             <View style={styles.dragHandle} />
 
             <View style={styles.header}>
@@ -174,7 +169,6 @@ export default function AddGoalModal() {
               </Pressable>
             </View>
 
-            {/* 반응형 탭 컨테이너 */}
             <View
               style={styles.tabContainer}
               onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}

@@ -208,7 +208,7 @@ export default function GeoReset({ radiusM = 80, setRadiusM, onHomeChanged }) {
         <View style={styles.c}>
           <Text style={styles.l}>앱 종료 후 알림</Text>
           <Switch
-            trackColor={{ false: "#767577", true: "#34C759" }} // iOS 기본 초록색(#34C759)
+            trackColor={{ false: "#767577", true: "#34C759" }}
             thumbColor={
               Platform.OS === "ios"
                 ? undefined
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   disabledBtn: { opacity: 0.5 },
   warn: { color: "#ff9f0a", fontSize: 12, marginTop: 10, fontWeight: "700" },
   c: {
-    flexDirection: "row", // 텍스트와 스위치를 가로로 배치
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,

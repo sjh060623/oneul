@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Tabs } from "expo-router"; // 또는 사용 중인 탭 라이브러리
+import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import React from "react";
 import { DynamicColorIOS, Platform, View } from "react-native";
@@ -102,7 +102,7 @@ export default function TabsLayout() {
         headerShown: false,
       }}
     >
-      {/* 홈 탭 */}
+      {/* 홈 */}
       <Tabs.Screen
         name="home"
         options={{
@@ -117,7 +117,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 기록 탭 */}
+      {/* 기록 */}
       <Tabs.Screen
         name="record"
         options={{
@@ -128,7 +128,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 검색 탭 */}
+      {/* 검색 */}
       <Tabs.Screen
         name="search"
         options={{
@@ -139,7 +139,7 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* 프로필 탭 */}
+      {/* 프로맆ㄹ */}
       <Tabs.Screen
         name="profile"
         options={{

@@ -19,7 +19,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useGoals } from "../src/goalsStore";
 
-// 유틸리티 함수들 (동일)
 function groupByDate(records) {
   const arr = Array.isArray(records) ? records : [];
   const map = new Map();
@@ -85,9 +84,8 @@ export default function RecordScreen() {
   const [tab, setTab] = useState("calendar");
   const slide = useRef(new Animated.Value(0)).current;
 
-  // ✅ 반응형 탭 너비 계산용 상태
   const [containerWidth, setContainerWidth] = useState(0);
-  const padding = 4; // tabsOuter의 padding 값
+  const padding = 4; // tabsOuter padding
   const pillWidth = (containerWidth - padding * 2) / 2;
 
   useEffect(() => {
@@ -113,7 +111,7 @@ export default function RecordScreen() {
     return hit ? hit.items : [];
   }, [sections, pickedKey]);
 
-  // 모달 상태
+  // 모달state
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [memo, setMemo] = useState("");
@@ -478,7 +476,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 20,
     backgroundColor: "#161616",
-    padding: 4, // 이 값이 padding 변수와 일치해야 함
+    padding: 4,
     flexDirection: "row",
     marginBottom: 20,
     borderWidth: 1,

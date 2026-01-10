@@ -26,7 +26,7 @@ export default function Profile() {
   const [profile, setProfile] = useState({ name: "", photoUri: "" });
   const [open, setOpen] = useState(false);
 
-  // 모달 편집 상태
+  // 모달
   const [draftName, setDraftName] = useState("");
   const [draftPhoto, setDraftPhoto] = useState("");
 
@@ -103,7 +103,6 @@ export default function Profile() {
           text: "확인",
           onPress: async () => {
             try {
-              // 💡 튜토리얼 플래그 삭제
               await AsyncStorage.removeItem("APP_HAS_LAUNCHED_V1");
               Alert.alert(
                 "설정 완료",
@@ -262,7 +261,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  // 프로필 카드
   profileCard: {
     backgroundColor: "#161616",
     borderRadius: 28,
@@ -310,7 +308,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  // 모달 스타일
+  // 모달
   modalBack: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.8)",

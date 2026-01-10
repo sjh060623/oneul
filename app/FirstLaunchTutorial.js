@@ -187,8 +187,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   activeDot: {
-    width: 32, // 현재 위치를 더 강조하기 위해 길이를 늘림
-    backgroundColor: "#6366F1", // 인디고 블루 포인트
+    width: 32,
+    backgroundColor: "#6366F1",
   },
   inactiveDot: {
     width: 8,

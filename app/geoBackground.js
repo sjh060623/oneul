@@ -7,7 +7,7 @@ export const GEOFENCE_TASK = "HOME_GEOFENCE_TASK_V1";
 const GOALS_KEY = "GOALS_V1";
 const GEOFENCE_STATE_KEY = "GEOFENCE_STATE_V1"; // { home: true/false, goals: { [goalId]: true/false } }
 const RECORDS_KEY = "GOAL_RECORDS_V1";
-// iOS
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -125,10 +125,10 @@ async function moveGoalToRecordsById(goalId) {
     const idStr = String(goalId);
     const found = goals.find((g) => String(g?.id) === idStr);
 
-    // goals에서 제거
+    // 제거
     const nextGoals = goals.filter((g) => String(g?.id) !== idStr);
 
-    // records에 추가
+    // 추가
     const now = Date.now();
     const nextRecs = Array.isArray(recs) ? recs.slice() : [];
 
@@ -178,7 +178,7 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
 
   // 집
   if (parsed.kind === "home") {
-    const prev = state.home; // true/false/null
+    const prev = state.home;
     const next =
       eventType === Location.GeofencingEventType.Enter
         ? true
@@ -192,11 +192,8 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
     }
 
     if (prev === next) return;
-
-    // 상태 저장
     await setGeofenceState({ ...state, home: next });
 
-    // 변화 순간에만 알림
     if (next === false) {
       await Notifications.scheduleNotificationAsync({
         content: {
@@ -217,7 +214,7 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
   // 목표
   if (parsed.kind === "goal") {
     const goalId = String(parsed.id);
-    const prev = state.goals?.[goalId]; // true/false/undefined
+    const prev = state.goals?.[goalId];
 
     const isEnter = eventType === Location.GeofencingEventType.Enter;
     const isExit = eventType === Location.GeofencingEventType.Exit;
@@ -232,7 +229,7 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }) => {
     }
 
     if (isEnter) {
-      if (prev === true) return; // 이미 inside면 중복
+      if (prev === true) return; // 중볻처리
 
       const goalName = await getGoalNameById(goalId);
 

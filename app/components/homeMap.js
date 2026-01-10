@@ -1,4 +1,3 @@
-// app/components/homeMap.js
 import * as Location from "expo-location";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -14,7 +13,7 @@ export default function HomeMap({ height = 420 }) {
   const mapRef = useRef(null);
   const pullRef = useRef(null);
   const [pos, setPos] = useState(null);
-  const [perm, setPerm] = useState("unknown"); // unknown | granted | denied
+  const [perm, setPerm] = useState("unknown");
   const [lastFixAt, setLastFixAt] = useState(null);
   const [drag, setDrag] = useState(false);
   const goalPins = useMemo(() => {
@@ -32,7 +31,7 @@ export default function HomeMap({ height = 420 }) {
       })
       .filter(Boolean);
 
-    return list.slice(0, 30); // 30개 제한
+    return list.slice(0, 30);
   }, [goals]);
 
   const allCoords = useMemo(() => {
@@ -42,7 +41,6 @@ export default function HomeMap({ height = 420 }) {
     return arr;
   }, [pos, goalPins]);
 
-  // 위치 권한 + 현재 위치 갱신
   useEffect(() => {
     let mounted = true;
 
@@ -97,7 +95,6 @@ export default function HomeMap({ height = 420 }) {
 
     return () => clearInterval(id);
   }, [drag]);
-  // 모든 핀 보이게 자동 fit
   useEffect(() => {
     if (!mapRef.current) return;
     if (!allCoords.length) return;
@@ -116,7 +113,7 @@ export default function HomeMap({ height = 420 }) {
   }, [allCoords, drag]);
 
   const initialRegion = useMemo(() => {
-    const base = pos || { latitude: 37.5665, longitude: 126.978 }; // pos 없으면 서울
+    const base = pos || { latitude: 37.5665, longitude: 126.978 };
     const spread = clamp(goalPins.length, 0, 10);
     const delta = 0.01 + spread * 0.004;
     return {

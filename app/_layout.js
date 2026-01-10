@@ -1,4 +1,3 @@
-// app/_layout.js  (Provider 감싸기)
 import { Stack } from "expo-router";
 import React from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
