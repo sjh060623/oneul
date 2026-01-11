@@ -1,21 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
+import { DeviceMotion } from "expo-sensors";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { startHomeAndGoalsGeofence, stopHomeGeofence } from "../geoBackground";
 import { useGoals } from "../src/goalsStore";
 
 function toRad(v) {
   return (v * Math.PI) / 180;
 }
-
 function distanceMeters(a, b) {
   const R = 6371000;
   const dLat = toRad(b.latitude - a.latitude);
   const dLon = toRad(b.longitude - a.longitude);
   const lat1 = toRad(a.latitude);
   const lat2 = toRad(b.latitude);
-
   const s1 = Math.sin(dLat / 2);
   const s2 = Math.sin(dLon / 2);
   const h = s1 * s1 + Math.cos(lat1) * Math.cos(lat2) * s2 * s2;
@@ -25,46 +25,57 @@ function distanceMeters(a, b) {
 
 const HOME_KEY = "HOME_COORD_V1";
 
-export default function Home({ radiusM = 80 }) {
-  const { goals, toggleGoal, removeGoal } = useGoals();
+const GlassCard = ({ children, style, intensity = 40, isDark }) => (
+  <View
+    style={[
+      styles.glassWrapper,
+      style,
+      isDark ? styles.darkBorder : styles.lightBorder,
+    ]}
+  >
+    <BlurView
+      intensity={intensity}
+      tint={isDark ? "dark" : "light"}
+      style={styles.glassPadding}
+    >
+      {children}
+    </BlurView>
+  </View>
+);
 
+export default function GeoStatus({ radiusM = 80 }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const theme = isDark ? darkTheme : lightTheme;
+
+  const { goals } = useGoals();
   const [home, setHome] = useState(null);
   const homePollRef = useRef(null);
   const lastHomeRawRef = useRef(null);
   const lastGeofenceSigRef = useRef(null);
 
+  const tiltX = useRef(new Animated.Value(0)).current;
+  const tiltY = useRef(new Animated.Value(0)).current;
+
+  // 집 위치 로드
   useEffect(() => {
     let mounted = true;
-
     const loadHome = async () => {
       try {
         const saved = await AsyncStorage.getItem(HOME_KEY);
-        if (!mounted) return;
-
-        if (saved === lastHomeRawRef.current) return;
+        if (!mounted || saved === lastHomeRawRef.current) return;
         lastHomeRawRef.current = saved;
-
         const next = saved ? JSON.parse(saved) : null;
-
-        if (next?.latitude && next?.longitude) setHome(next);
-        else setHome(null);
+        setHome(next?.latitude && next?.longitude ? next : null);
       } catch {
-        if (mounted) {
-          lastHomeRawRef.current = null;
-          setHome(null);
-        }
+        if (mounted) setHome(null);
       }
     };
-
     loadHome();
-
     homePollRef.current = setInterval(loadHome, 1500);
-
     return () => {
       mounted = false;
-      try {
-        if (homePollRef.current) clearInterval(homePollRef.current);
-      } catch {}
+      clearInterval(homePollRef.current);
     };
   }, []);
 
@@ -72,14 +83,12 @@ export default function Home({ radiusM = 80 }) {
   const [lastFixAt, setLastFixAt] = useState(null);
   const pollRef = useRef(null);
 
+  // 실시간 위치 추적 및 센서 로직
   useEffect(() => {
     let mounted = true;
-
     const boot = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (!mounted) return;
-      if (status !== "granted") return;
-
+      if (!mounted || status !== "granted") return;
       const pull = async () => {
         try {
           const cur = await Location.getCurrentPositionAsync({
@@ -91,40 +100,53 @@ export default function Home({ radiusM = 80 }) {
             longitude: cur.coords.longitude,
           });
           setLastFixAt(Date.now());
-        } catch {
-          // ignore
-        }
+        } catch {}
       };
-
       await pull();
       pollRef.current = setInterval(pull, 5000);
     };
-
     boot();
+
+    // 센서 로직 통합
+    DeviceMotion.setUpdateInterval(16);
+    const motionSub = DeviceMotion.addListener(({ rotation }) => {
+      if (rotation) {
+        const { gamma, beta } = rotation;
+        Animated.spring(tiltX, {
+          toValue: gamma * 30,
+          useNativeDriver: true,
+          friction: 8,
+        }).start();
+        Animated.spring(tiltY, {
+          toValue: (beta - 1) * 30,
+          useNativeDriver: true,
+          friction: 8,
+        }).start();
+      }
+    });
 
     return () => {
       mounted = false;
-      try {
-        if (pollRef.current) clearInterval(pollRef.current);
-      } catch {}
+      clearInterval(pollRef.current);
+      motionSub.remove();
     };
   }, []);
 
-  const dist = useMemo(() => {
-    if (!home || !pos) return null;
-    return distanceMeters(home, pos);
-  }, [home, pos]);
-
-  const insideHome = useMemo(() => {
-    if (dist == null) return null;
-    return dist <= radiusM;
-  }, [dist, radiusM]);
+  const dist = useMemo(
+    () => (home && pos ? distanceMeters(home, pos) : null),
+    [home, pos]
+  );
+  const insideHome = useMemo(
+    () => (dist != null ? dist <= radiusM : null),
+    [dist, radiusM]
+  );
 
   const message = useMemo(() => {
     if (!home) return "집 위치를 설정해 주세요.";
-    if (!pos) return "현재 위치 확인 중…";
-    if (insideHome == null) return "현재 위치 확인 중…";
-    return insideHome ? "집 근처에 있어요." : "집을 벗어나 있는 상태예요.";
+    if (!pos) return "현재 위치를 확인 중이에요.";
+    return insideHome
+      ? "지금은 집 근처에 머물고 있어요."
+      : "집을 벗어나 활동 중이에요.";
   }, [home, pos, insideHome]);
 
   const lastLabel = useMemo(() => {
@@ -136,13 +158,14 @@ export default function Home({ radiusM = 80 }) {
     });
   }, [lastFixAt]);
 
-  const goCoordGoals = useMemo(() => {
-    return (goals || []).filter((g) => g?.coord && !g.done);
-  }, [goals]);
+  const goCoordGoals = useMemo(
+    () => (goals || []).filter((g) => g?.coord && !g.done),
+    [goals]
+  );
 
+  // 지오펜싱 제어
   useEffect(() => {
     let cancelled = false;
-
     const run = async () => {
       try {
         if (!home) {
@@ -150,27 +173,16 @@ export default function Home({ radiusM = 80 }) {
           await stopHomeGeofence();
           return;
         }
-
-        const targets = (goCoordGoals || [])
+        const targets = goCoordGoals
           .map((g) => ({
             id: String(g.id),
-            lat: Number(g?.coord?.latitude),
-            lon: Number(g?.coord?.longitude),
+            lat: Number(g.coord.latitude),
+            lon: Number(g.coord.longitude),
           }))
-          .filter(
-            (t) => t.id && Number.isFinite(t.lat) && Number.isFinite(t.lon)
-          )
           .sort((a, b) => a.id.localeCompare(b.id));
-
-        const sig = JSON.stringify({
-          home: { lat: Number(home.latitude), lon: Number(home.longitude) },
-          goalRadiusM: 120,
-          targets,
-        });
-
+        const sig = JSON.stringify({ home, goalRadiusM: 120, targets });
         if (sig === lastGeofenceSigRef.current) return;
         lastGeofenceSigRef.current = sig;
-
         await startHomeAndGoalsGeofence({
           home,
           goals: targets.map((t) => ({
@@ -179,135 +191,101 @@ export default function Home({ radiusM = 80 }) {
           })),
           goalRadiusM: 120,
         });
-      } catch {
-        // ignore
-      }
+      } catch {}
     };
-
     const t = setTimeout(() => {
       if (!cancelled) run();
     }, 500);
-
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
   }, [home, goCoordGoals]);
 
-  const goGoalsWithDistance = useMemo(() => {
-    return goCoordGoals
-      .map((g) => {
-        if (!pos) return { ...g, meters: null };
-        const c = g.coord;
-        if (!c) return { ...g, meters: null };
-
-        const meters = distanceMeters(
-          { latitude: c.latitude, longitude: c.longitude },
-          pos
-        );
-
-        return { ...g, meters: Number.isFinite(meters) ? meters : null };
-      })
-      .sort((a, b) => {
-        const am = a.meters == null ? Number.POSITIVE_INFINITY : a.meters;
-        const bm = b.meters == null ? Number.POSITIVE_INFINITY : b.meters;
-        return am - bm;
-      });
-  }, [goCoordGoals, pos]);
-
   return (
     <View style={styles.container}>
-      <View style={styles.wrap}>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.title}>위치</Text>
-            {/**
-             * 
-             *   <View style={styles.badge}>
-              <Text style={styles.badgeText}>{radiusM}m</Text>
-            </View>
-             */}
-          </View>
-
-          <Text style={styles.msg} numberOfLines={2}>
-            {message}
-          </Text>
-
-          <Text style={styles.sub}>
-            업데이트: {lastLabel}
-            {pos
-              ? `  ·  (${pos.latitude.toFixed(5)}, ${pos.longitude.toFixed(5)})`
-              : ""}
-          </Text>
-
-          {dist != null ? (
-            <Text style={styles.sub}>
-              집까지 약 {Math.max(0, Math.round(dist))}m
+      <GlassCard isDark={isDark} intensity={25}>
+        <View style={styles.row}>
+          <Text style={[styles.title, { color: theme.text }]}>실시간 위치</Text>
+          <View style={[styles.badge, { backgroundColor: theme.badgeBg }]}>
+            <Text style={[styles.badgeText, { color: theme.primary }]}>
+              {insideHome ? "HOME" : "AWAY"}
             </Text>
-          ) : (
-            <Text style={styles.sub}>
-              집/현재 위치가 준비되면 거리 표시가 나와요.
+          </View>
+        </View>
+
+        <Text style={[styles.msg, { color: theme.text }]}>{message}</Text>
+
+        <View style={[styles.infoBox, { borderTopColor: theme.progressTrack }]}>
+          <Text style={[styles.sub, { color: theme.subText }]}>
+            업데이트: {lastLabel}
+          </Text>
+          {dist != null && (
+            <Text style={[styles.distText, { color: theme.text }]}>
+              집까지 약{" "}
+              <Text style={[styles.highlight, { color: theme.primary }]}>
+                {Math.max(0, Math.round(dist))}m
+              </Text>
             </Text>
           )}
         </View>
-      </View>
+
+        {pos && (
+          <Text style={[styles.coordText, { color: theme.subText }]}>
+            ({pos.latitude.toFixed(4)}, {pos.longitude.toFixed(4)})
+          </Text>
+        )}
+      </GlassCard>
     </View>
   );
 }
 
+const lightTheme = {
+  text: "#2D3748",
+  subText: "#718096",
+  primary: "#818CF8",
+  badgeBg: "#F0F4FF",
+  progressTrack: "rgba(0,0,0,0.05)",
+};
+const darkTheme = {
+  text: "#FFF",
+  subText: "rgba(255,255,255,0.3)",
+  primary: "#A78BFA",
+  badgeBg: "rgba(167, 139, 250, 0.15)",
+  progressTrack: "rgba(255,255,255,0.05)",
+};
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { marginTop: 12 },
+  glassWrapper: { borderRadius: 24, overflow: "hidden", borderWidth: 1 },
+  lightBorder: {
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    borderColor: "rgba(255, 255, 255, 0.7)",
   },
-  sectionHeader: {
-    marginBottom: 8,
+  darkBorder: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
-  sectionTitle: { color: "#fff", fontSize: 14, fontWeight: "900" },
-  sectionHint: {
-    fontSize: 12,
-    color: "#6f7377",
-    marginBottom: 12,
-  },
-  goalItem: {
-    marginBottom: 12,
-  },
-  goalText: { color: "#fff", fontSize: 13, fontWeight: "900" },
-  coordText: {
-    color: "#6f7377",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "700",
-  },
-  distText: {
-    color: "#6f7377",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "800",
-  },
-  wrap: { marginTop: 12 },
-  card: {
-    backgroundColor: "#121212",
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
-  },
+  glassPadding: { padding: 20 },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  title: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  badge: {
-    backgroundColor: "#1f1f1f",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
+  title: { fontSize: 16, fontWeight: "800" },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 10, fontWeight: "900" },
+  msg: { fontSize: 14, fontWeight: "700", marginBottom: 16 },
+  infoBox: { borderTopWidth: 1, paddingTop: 12, gap: 4 },
+  sub: { fontSize: 12, fontWeight: "600" },
+  distText: { fontSize: 13, fontWeight: "700" },
+  highlight: { fontWeight: "800" },
+  coordText: {
+    fontSize: 10,
+    marginTop: 8,
+    textAlign: "right",
+    fontWeight: "500",
   },
-  badgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  msg: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  sub: { color: "#6f7377", fontSize: 12, marginTop: 6, fontWeight: "700" },
 });

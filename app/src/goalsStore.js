@@ -1,4 +1,3 @@
-// app/src/goalsStore.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
@@ -12,7 +11,7 @@ import React, {
 const ACTIVE_KEY = "GOALS_V1";
 const RECORDS_KEY = "GOAL_RECORDS_V1";
 const DAILY_PREF_KEY = "DAILY_PREF_V1";
-const UNACHIEVED_KEY = "UNACHIEVED_STATS_V1"; // 미달성 기록용 키 추가
+const UNACHIEVED_KEY = "UNACHIEVED_STATS_V1";
 
 const GoalsCtx = createContext(null);
 

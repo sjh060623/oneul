@@ -1,4 +1,3 @@
-// app/src/useGoGoalsWithDistance.js
 import * as Location from "expo-location";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useGoals } from "./goalsStore";
@@ -21,7 +20,6 @@ export function distanceMeters(a, b) {
   return R * c;
 }
 
-// ✅ 다른 컴포넌트에서 그대로 가져다 쓰는 Hook
 export function useGoGoalsWithDistance({ pollMs = 5000 } = {}) {
   const { goals } = useGoals();
 

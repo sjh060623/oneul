@@ -1,4 +1,6 @@
+import AntDesign from "@expo/vector-icons/AntDesign";
 import Ionicons from "@expo/vector-icons/Ionicons";
+
 import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import React from "react";
@@ -43,14 +45,14 @@ export default function TabsLayout() {
           />
           <Label>기록</Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="search">
+        <NativeTabs.Trigger name="insight">
           <Icon
             sf={{
-              default: "magnifyingglass",
-              selected: "magnifyingglass",
+              default: "chart.dots.scatter",
+              selected: "chart.dots.scatter",
             }}
           />
-          <Label>검색</Label>
+          <Label>분석</Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="profile">
           <Icon
@@ -130,11 +132,11 @@ export default function TabsLayout() {
 
       {/* 검색 */}
       <Tabs.Screen
-        name="search"
+        name="insight"
         options={{
-          title: "검색",
+          title: "분석",
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name="search" size={22} color={color} />
+            <AntDesign name="dot-chart" size={22} color={color} />
           ),
         }}
       />

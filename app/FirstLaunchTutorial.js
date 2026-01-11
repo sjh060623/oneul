@@ -8,10 +8,12 @@ import {
   StyleSheet,
   Text,
   View,
+  useColorScheme,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
 const HAS_LAUNCHED_KEY = "APP_HAS_LAUNCHED_V1";
+
 const SLIDES = [
   {
     id: "1",
@@ -40,12 +42,16 @@ const SLIDES = [
   {
     id: "5",
     emoji: "⚙️",
-    title: "위치 권한 설정",
-    sub: "원활한 작동을 위해 기기 설정에서\n위치 접근 권한을 '항상'으로 허용해 주세요.",
+    title: "권한 설정",
+    sub: "원활한 작동을 위해 기기 설정에서\n 알림과, 위치 접근 권한을 '항상'으로 허용해 주세요.",
   },
 ];
 
 export default function FirstLaunchTutorial() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const styles = isDark ? darkStyles : lightStyles;
+
   const [visible, setVisible] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
@@ -86,7 +92,8 @@ export default function FirstLaunchTutorial() {
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.container}>
-        {/*리스트 */}
+        {/* 배경 글로우 효과 (Style B) */}
+
         <FlatList
           ref={flatListRef}
           data={SLIDES}
@@ -99,9 +106,8 @@ export default function FirstLaunchTutorial() {
           scrollEventThrottle={16}
         />
 
-        {/* 하단 */}
         <View style={styles.footer}>
-          {/* 페이지  */}
+          {/* 인디케이터 (페이지 점) */}
           <View style={styles.indicatorRow}>
             {SLIDES.map((_, i) => (
               <View
@@ -114,7 +120,7 @@ export default function FirstLaunchTutorial() {
             ))}
           </View>
 
-          {/* 버튼 */}
+          {/* 하단 버튼 영역 */}
           <View style={styles.buttonRow}>
             {currentIndex === SLIDES.length - 1 ? (
               <Pressable onPress={onComplete} style={styles.mainBtn}>
@@ -132,10 +138,16 @@ export default function FirstLaunchTutorial() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
+const lightStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F8F9FF" },
+  bgGlow: {
+    position: "absolute",
+    top: "10%",
+    alignSelf: "center",
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    backgroundColor: "rgba(129, 140, 248, 0.15)",
   },
   slide: {
     width: width,
@@ -146,79 +158,107 @@ const styles = StyleSheet.create({
   emojiContainer: {
     width: 160,
     height: 160,
-    backgroundColor: "#161616",
+    backgroundColor: "#FFFFFF",
     borderRadius: 80,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 40,
-    borderWidth: 1,
-    borderColor: "#262626",
+    shadowColor: "#818CF8",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
   },
-  emoji: {
-    fontSize: 70,
-  },
+  emoji: { fontSize: 70 },
   slideTitle: {
-    color: "#fff",
+    color: "#2D3748",
     fontSize: 28,
-    fontWeight: "900",
+    fontWeight: "800",
     textAlign: "center",
     marginBottom: 20,
     letterSpacing: -0.5,
   },
   slideSub: {
-    color: "#6f7377",
+    color: "#718096",
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
     lineHeight: 26,
   },
-  footer: {
-    paddingBottom: 60,
-    paddingHorizontal: 30,
-  },
+  footer: { paddingBottom: 60, paddingHorizontal: 30 },
   indicatorRow: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 8,
     marginBottom: 40,
   },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-  },
-  activeDot: {
-    width: 32,
-    backgroundColor: "#6366F1",
-  },
-  inactiveDot: {
-    width: 8,
-    backgroundColor: "#262626",
-  },
-  buttonRow: {
-    height: 56,
-    justifyContent: "center",
-  },
+  dot: { height: 8, borderRadius: 4 },
+  activeDot: { width: 32, backgroundColor: "#6366F1" },
+  inactiveDot: { width: 8, backgroundColor: "#E2E8F0" },
+  buttonRow: { height: 56, justifyContent: "center" },
   mainBtn: {
-    backgroundColor: "#fff",
+    backgroundColor: "#6366F1",
     height: 56,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#fff",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
   },
-  mainBtnText: {
-    color: "#000",
-    fontSize: 17,
-    fontWeight: "900",
+  mainBtnText: { color: "#FFF", fontSize: 17, fontWeight: "800" },
+  hintBox: { alignItems: "center" },
+  hintText: { color: "#A0AEC0", fontSize: 14, fontWeight: "700" },
+});
+
+const darkStyles = StyleSheet.create({
+  ...lightStyles,
+  container: { flex: 1, backgroundColor: "#0D0B14" },
+  bgGlow: {
+    position: "absolute",
+    top: "10%",
+    alignSelf: "center",
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    backgroundColor: "rgba(99, 102, 241, 0.1)",
   },
-  hintBox: {
+  emojiContainer: {
+    width: 160,
+    height: 160,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 80,
     alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 40,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
-  hintText: {
-    color: "#333",
-    fontSize: 14,
+  slideTitle: {
+    color: "#FFF",
+    fontSize: 28,
     fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 20,
+    letterSpacing: -0.5,
+  },
+  slideSub: {
+    color: "rgba(255, 255, 255, 0.4)",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 26,
+  },
+  activeDot: { width: 32, backgroundColor: "#A78BFA" },
+  inactiveDot: { width: 8, backgroundColor: "rgba(255, 255, 255, 0.1)" },
+  mainBtn: {
+    backgroundColor: "#FFF",
+    height: 56,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mainBtnText: { color: "#000", fontSize: 17, fontWeight: "800" },
+  hintText: {
+    color: "rgba(255, 255, 255, 0.2)",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

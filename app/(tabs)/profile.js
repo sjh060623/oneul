@@ -1,8 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
-import React, { useEffect, useMemo, useState } from "react";
+import { DeviceMotion } from "expo-sensors";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Dimensions,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -13,29 +17,52 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
   View,
+  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DailyTimeSetting from "../components/DailyTimeSetting";
 import GeoReset from "../components/goeReset";
 
+const { width, height } = Dimensions.get("window");
 const PROFILE_KEY = "PROFILE_V1";
 
+const GlassCard = ({ children, style, intensity = 40, isDark }) => (
+  <View
+    style={[
+      styles.glassWrapper,
+      style,
+      isDark ? styles.darkBorder : styles.lightBorder,
+    ]}
+  >
+    <BlurView
+      intensity={intensity}
+      tint={isDark ? "dark" : "light"}
+      style={styles.glassPadding}
+    >
+      {children}
+    </BlurView>
+  </View>
+);
+
 export default function Profile() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const theme = isDark ? darkTheme : lightTheme;
+
   const [profile, setProfile] = useState({ name: "", photoUri: "" });
   const [open, setOpen] = useState(false);
-
-  // 모달
   const [draftName, setDraftName] = useState("");
   const [draftPhoto, setDraftPhoto] = useState("");
 
+  const tiltX = useRef(new Animated.Value(0)).current;
+  const tiltY = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    let mounted = true;
-    const boot = async () => {
+    // 프로필 로드
+    const loadProfile = async () => {
       try {
         const raw = await AsyncStorage.getItem(PROFILE_KEY);
-        if (!mounted) return;
         if (raw) {
           const parsed = JSON.parse(raw);
           setProfile({
@@ -43,32 +70,51 @@ export default function Profile() {
             photoUri: String(parsed?.photoUri || ""),
           });
         }
-      } catch {
-        if (mounted) setProfile({ name: "", photoUri: "" });
+      } catch (e) {
+        console.error(e);
       }
     };
-    boot();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    loadProfile();
 
-  const displayName = useMemo(() => {
-    return profile.name.trim() || "이름을 설정해주세요";
-  }, [profile.name]);
+    DeviceMotion.setUpdateInterval(16);
+    const subscription = DeviceMotion.addListener(({ rotation }) => {
+      if (rotation) {
+        const { gamma, beta } = rotation;
+        Animated.spring(tiltX, {
+          toValue: gamma * 50,
+          useNativeDriver: true,
+          friction: 8,
+        }).start();
+        Animated.spring(tiltY, {
+          toValue: (beta - 1) * 50,
+          useNativeDriver: true,
+          friction: 8,
+        }).start();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [open]);
+
+  const displayName = useMemo(
+    () => profile.name.trim() || "이름을 설정해 주세요",
+    [profile.name]
+  );
 
   const openEdit = () => {
     setDraftName(profile.name);
     setDraftPhoto(profile.photoUri);
     setOpen(true);
   };
-
   const closeEdit = () => setOpen(false);
 
   const pickPhoto = async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (perm.status !== "granted") return;
+      if (perm.status !== "granted") {
+        Alert.alert("권한 필요", "사진을 선택하려면 갤러리 권한이 필요해요.");
+        return;
+      }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -82,10 +128,7 @@ export default function Profile() {
   };
 
   const save = async () => {
-    const next = {
-      name: draftName.trim(),
-      photoUri: draftPhoto,
-    };
+    const next = { name: draftName.trim(), photoUri: draftPhoto };
     setProfile(next);
     setOpen(false);
     try {
@@ -96,7 +139,7 @@ export default function Profile() {
   const replayTutorial = async () => {
     Alert.alert(
       "튜토리얼 재설정",
-      "앱을 다시 시작할 때 가이드 화면이 나타나도록 설정할까요?",
+      "가이드 화면이 다시 나타나도록 설정할까요?",
       [
         { text: "취소", style: "cancel" },
         {
@@ -104,10 +147,7 @@ export default function Profile() {
           onPress: async () => {
             try {
               await AsyncStorage.removeItem("APP_HAS_LAUNCHED_V1");
-              Alert.alert(
-                "설정 완료",
-                "앱을 완전히 종료 후 다시 열면 튜토리얼이 나타납니다."
-              );
+              Alert.alert("설정 완료", "앱을 재시작하면 튜토리얼이 나타나요.");
             } catch (e) {
               console.error(e);
             }
@@ -116,214 +156,380 @@ export default function Profile() {
       ]
     );
   };
+
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.container}>
-          <Text style={styles.title}>설정</Text>
+    <SafeAreaView
+      style={[styles.screen, { backgroundColor: theme.background }]}
+      edges={["top", "left", "right"]}
+    >
+      <View style={styles.glowContainer} pointerEvents="none">
+        <Animated.View
+          style={[
+            styles.glowCircle,
+            {
+              backgroundColor: theme.glowColor,
+              transform: [{ translateX: tiltX }, { translateY: tiltY }],
+            },
+          ]}
+        />
+      </View>
 
-          {/* 메인 프로필 카드 */}
-          <View style={styles.profileCard}>
-            <View style={styles.profileRow}>
-              <View style={styles.avatarContainer}>
-                {profile.photoUri ? (
-                  <Image
-                    source={{ uri: profile.photoUri }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarPlaceholderText}>👤</Text>
-                  </View>
-                )}
-              </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.container}
+      >
+        <View style={styles.header}>
+          <Text style={[styles.dateText, { color: theme.primary }]}>
+            Settings
+          </Text>
+          <Text style={[styles.title, { color: theme.text }]}>프로필</Text>
+        </View>
 
-              <View style={styles.profileInfo}>
-                <Text style={styles.nameText}>{displayName}</Text>
-                <Text style={styles.subText}>오늘 하루도 힘차게!</Text>
-              </View>
+        <GlassCard style={styles.cardMargin} isDark={isDark} intensity={30}>
+          <View style={styles.profileRow}>
+            <View style={styles.avatarContainer}>
+              {profile.photoUri ? (
+                <Image
+                  source={{ uri: profile.photoUri }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarEmoji}>{isDark ? "🌙" : "☀️"}</Text>
+                </View>
+              )}
             </View>
-
-            <Pressable onPress={openEdit} style={styles.editBtn}>
-              <Text style={styles.editBtnText}>프로필 수정하기</Text>
-            </Pressable>
+            <View style={styles.profileInfo}>
+              <Text style={[styles.nameText, { color: theme.text }]}>
+                {displayName}
+              </Text>
+              <Text style={[styles.subText, { color: theme.primary }]}>
+                오늘 하루도 소중하게
+              </Text>
+            </View>
           </View>
+          <Pressable
+            onPress={openEdit}
+            style={[styles.editBtn, { backgroundColor: theme.addBtnBg }]}
+          >
+            <Text style={[styles.editBtnText, { color: theme.primary }]}>
+              프로필 관리
+            </Text>
+          </Pressable>
+        </GlassCard>
 
-          {/* 설정 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>알림 설정</Text>
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>
+            나의 루틴
+          </Text>
+          <GlassCard isDark={isDark} intensity={20}>
             <DailyTimeSetting />
-          </View>
+          </GlassCard>
+        </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>집 관리</Text>
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>
+            시스템 및 가이드
+          </Text>
+          <GlassCard isDark={isDark} intensity={20}>
             <GeoReset />
-            <View style={{ marginTop: 24 }}>
-              <Text style={styles.sectionLabel}>튜토리얼</Text>
-            </View>
+            <View
+              style={[styles.divider, { backgroundColor: theme.progressTrack }]}
+            />
             <Pressable onPress={replayTutorial} style={styles.menuItem}>
-              <View style={styles.menuIconBox}>
+              <View
+                style={[
+                  styles.menuIconBox,
+                  { backgroundColor: theme.addBtnBg },
+                ]}
+              >
                 <Text style={{ fontSize: 14 }}>📖</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.menuTitle}>튜토리얼 다시보기</Text>
-                <Text style={styles.menuSub}>
-                  앱 사용법 가이드를 다시 확인합니다.
+                <Text style={[styles.menuTitle, { color: theme.text }]}>
+                  튜토리얼 다시보기
                 </Text>
               </View>
-              <Text style={styles.menuArrow}>〉</Text>
+              <Text style={[styles.menuArrow, { color: theme.subText }]}>
+                〉
+              </Text>
             </Pressable>
-          </View>
+          </GlassCard>
         </View>
+        <View style={{ marginBottom: 70 }} />
       </ScrollView>
 
-      {/* 프로필 수정 */}
       <Modal
         visible={open}
         transparent
         animationType="slide"
         onRequestClose={closeEdit}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalBack}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-              style={styles.keyboardView}
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeEdit} />
+
+          <View style={styles.glowContainer} pointerEvents="none"></View>
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.modalContent}
+          >
+            <View
+              style={[
+                styles.glassWrapper,
+                styles.modalSheet,
+                isDark ? styles.darkBorder : styles.lightBorder,
+              ]}
             >
-              <View style={styles.sheet}>
-                <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>프로필 수정</Text>
-                  <Pressable onPress={closeEdit} style={styles.sheetCloseBtn}>
-                    <Text style={styles.sheetCloseText}>닫기</Text>
-                  </Pressable>
-                </View>
-
-                {/* 사진 수정 */}
-                <View style={styles.modalAvatarSection}>
-                  <Pressable
-                    onPress={pickPhoto}
-                    style={styles.modalAvatarContainer}
-                  >
-                    {draftPhoto ? (
-                      <Image
-                        source={{ uri: draftPhoto }}
-                        style={styles.modalAvatar}
-                      />
-                    ) : (
-                      <View style={styles.modalAvatarPlaceholder}>
-                        <Text style={{ fontSize: 30 }}>📸</Text>
-                      </View>
-                    )}
-                    <View style={styles.cameraIconBadge}>
-                      <Text style={{ fontSize: 12 }}>Edit</Text>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setDraftPhoto("")}
-                    style={styles.photoDeleteBtn}
-                  >
-                    <Text style={styles.photoDeleteText}>사진 삭제</Text>
-                  </Pressable>
-                </View>
-
-                {/* 이름 수정 */}
-                <Text style={styles.inputLabel}>이름</Text>
-                <TextInput
-                  value={draftName}
-                  onChangeText={setDraftName}
-                  placeholder="이름을 입력하세요"
-                  placeholderTextColor="#444"
-                  style={styles.input}
-                  returnKeyType="done"
-                  onSubmitEditing={Keyboard.dismiss}
+              <BlurView
+                intensity={isDark ? 40 : 60}
+                tint={isDark ? "dark" : "light"}
+                style={styles.sheetContent}
+              >
+                <View
+                  style={[
+                    styles.sheetHandle,
+                    { backgroundColor: theme.progressTrack },
+                  ]}
                 />
 
-                <Pressable onPress={save} style={styles.saveBtn}>
-                  <Text style={styles.saveBtnText}>저장하기</Text>
-                </Pressable>
-              </View>
-            </KeyboardAvoidingView>
-          </View>
-        </TouchableWithoutFeedback>
+                <View style={styles.sheetHeader}>
+                  <Text style={[styles.sheetTitle, { color: theme.text }]}>
+                    프로필 설정
+                  </Text>
+                  <Pressable
+                    onPress={closeEdit}
+                    style={[
+                      styles.closeBtn,
+                      { backgroundColor: theme.progressTrack },
+                    ]}
+                  >
+                    <Text style={{ color: theme.subText, fontWeight: "700" }}>
+                      취소
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                >
+                  <View style={styles.modalAvatarSection}>
+                    <Pressable
+                      onPress={pickPhoto}
+                      style={[
+                        styles.modalAvatarContainer,
+                        { backgroundColor: theme.progressTrack },
+                      ]}
+                    >
+                      {draftPhoto ? (
+                        <Image
+                          source={{ uri: draftPhoto }}
+                          style={styles.modalAvatar}
+                        />
+                      ) : (
+                        <View style={styles.modalAvatarPlaceholder}>
+                          <Text style={{ fontSize: 40 }}>👤</Text>
+                        </View>
+                      )}
+                      <View
+                        style={[
+                          styles.cameraIconBadge,
+                          {
+                            backgroundColor: theme.primary,
+                            borderColor: isDark ? "#16161D" : "#FFF",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.cameraIconText,
+                            { color: isDark ? "#000" : "#FFF" },
+                          ]}
+                        >
+                          변경
+                        </Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setDraftPhoto("")}
+                      style={styles.photoDeleteBtn}
+                    >
+                      <Text style={styles.photoDeleteText}>사진 삭제</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: theme.subText }]}>
+                      이름
+                    </Text>
+                    <TextInput
+                      value={draftName}
+                      onChangeText={setDraftName}
+                      placeholder="당신의 이름을 알려주세요"
+                      placeholderTextColor={theme.subText}
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: theme.progressTrack,
+                          color: theme.text,
+                        },
+                      ]}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                  </View>
+
+                  <Pressable
+                    onPress={save}
+                    style={[
+                      styles.saveBtn,
+                      { backgroundColor: isDark ? "#FFF" : theme.primary },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.saveBtnText,
+                        { color: isDark ? "#000" : "#FFF" },
+                      ]}
+                    >
+                      저장하기
+                    </Text>
+                  </Pressable>
+                </ScrollView>
+              </BlurView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#000", paddingHorizontal: 20 },
-  container: { paddingBottom: 40 },
-  title: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "900",
-    marginTop: 20,
-    marginBottom: 24,
-  },
+const lightTheme = {
+  background: "#F0F2F9",
+  text: "#2D3748",
+  subText: "#718096",
+  primary: "#818CF8",
+  glowColor: "rgba(129, 140, 248, 0.15)",
+  progressTrack: "rgba(0,0,0,0.05)",
+  addBtnBg: "#F8F9FF",
+  border: "rgba(0,0,0,0.05)",
+};
+const darkTheme = {
+  background: "#0D0B14",
+  text: "#FFF",
+  subText: "rgba(255,255,255,0.4)",
+  primary: "#A78BFA",
+  glowColor: "rgba(167, 139, 250, 0.2)",
+  progressTrack: "rgba(255,255,255,0.1)",
+  addBtnBg: "rgba(255,255,255,0.08)",
+  border: "rgba(255,255,255,0.1)",
+};
 
-  profileCard: {
-    backgroundColor: "#161616",
-    borderRadius: 28,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: "#262626",
-    marginBottom: 32,
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  glowContainer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+    zIndex: -1,
   },
+  glowCircle: {
+    position: "absolute",
+    top: -100,
+    right: -100,
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+  },
+  container: { paddingBottom: 40 },
+  header: { paddingHorizontal: 24, marginTop: 20, marginBottom: 24 },
+  dateText: { fontSize: 14, fontWeight: "600", marginBottom: 4 },
+  title: { fontSize: 28, fontWeight: "800" },
+
+  glassWrapper: { borderRadius: 32, overflow: "hidden", borderWidth: 1 },
+  lightBorder: {
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    borderColor: "rgba(255, 255, 255, 0.7)",
+  },
+  darkBorder: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: "rgba(255, 255, 255, 0.15)",
+  },
+  glassPadding: { padding: 24 },
+  cardMargin: { marginHorizontal: 20, marginBottom: 28 },
+
   profileRow: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
   avatarContainer: {
     width: 72,
     height: 72,
     borderRadius: 24,
     overflow: "hidden",
-    backgroundColor: "#000",
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   avatar: { width: 72, height: 72 },
   avatarPlaceholder: {
-    width: 72,
-    height: 72,
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#262626",
   },
-  avatarPlaceholderText: { fontSize: 32 },
+  avatarEmoji: { fontSize: 32 },
   profileInfo: { marginLeft: 16, flex: 1 },
-  nameText: { color: "#fff", fontSize: 20, fontWeight: "900" },
-  subText: { color: "#6f7377", fontSize: 13, fontWeight: "600", marginTop: 4 },
-
+  nameText: { fontSize: 20, fontWeight: "800" },
+  subText: { fontSize: 13, fontWeight: "600", marginTop: 4 },
   editBtn: {
     height: 52,
-    borderRadius: 16,
-    backgroundColor: "#262626",
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.03)",
   },
-  editBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  editBtnText: { fontSize: 14, fontWeight: "700" },
 
-  section: { marginBottom: 24 },
+  section: { marginHorizontal: 20, marginBottom: 24 },
   sectionLabel: {
-    color: "#6f7377",
     fontSize: 13,
     fontWeight: "800",
     marginBottom: 12,
     marginLeft: 4,
   },
+  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 4 },
+  menuIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  menuTitle: { fontSize: 15, fontWeight: "600" },
+  menuArrow: { fontSize: 16 },
+  divider: { height: 1, marginVertical: 16 },
 
-  // 모달
-  modalBack: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
-  keyboardView: { width: "100%" },
-  sheet: {
-    backgroundColor: "#0b0b0b",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: Platform.OS === "ios" ? 44 : 24,
+  modalContent: { width: "100%" },
+  modalSheet: {
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#1f1f1f",
+  },
+  sheetContent: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 44 : 24,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16,
   },
   sheetHeader: {
     flexDirection: "row",
@@ -331,112 +537,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 32,
   },
-  sheetTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
-  sheetCloseBtn: { padding: 8, backgroundColor: "#161616", borderRadius: 12 },
-  sheetCloseText: { color: "#6f7377", fontSize: 13, fontWeight: "700" },
+  sheetTitle: { fontSize: 19, fontWeight: "900" },
+  closeBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
 
-  modalAvatarSection: { alignItems: "center", marginBottom: 24 },
+  modalAvatarSection: { alignItems: "center", marginBottom: 32 },
   modalAvatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 36,
-    position: "relative",
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    overflow: "hidden",
   },
-  modalAvatar: { width: 100, height: 100, borderRadius: 36 },
+  modalAvatar: { width: 110, height: 110, borderRadius: 55 },
   modalAvatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 36,
-    backgroundColor: "#161616",
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#262626",
   },
   cameraIconBadge: {
     position: "absolute",
-    bottom: -4,
-    right: -4,
-    backgroundColor: "#6366F1",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    bottom: 0,
+    right: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 3,
-    borderColor: "#0b0b0b",
   },
+  cameraIconText: { fontSize: 11, fontWeight: "800" },
   photoDeleteBtn: { marginTop: 12 },
-  photoDeleteText: { color: "#ff4444", fontSize: 13, fontWeight: "700" },
-
+  photoDeleteText: { color: "#FF6B6B", fontSize: 14, fontWeight: "600" },
+  inputGroup: { marginBottom: 24 },
   inputLabel: {
-    color: "#6f7377",
-    fontSize: 13,
-    fontWeight: "800",
-    marginBottom: 10,
-    marginLeft: 4,
-  },
-  input: {
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: "#161616",
-    borderWidth: 1,
-    borderColor: "#262626",
-    color: "#fff",
-    paddingHorizontal: 16,
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 24,
-  },
-  saveBtn: {
-    height: 56,
-    borderRadius: 20,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionLabel: {
-    color: "#6f7377",
-    fontSize: 13,
-    fontWeight: "800",
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#161616",
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#262626",
-    gap: 16,
-    marginTop: 10,
-  },
-  menuIconBox: {
-    width: 40,
-    height: 40,
-    backgroundColor: "#262626",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuTitle: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  menuSub: {
-    color: "#6f7377",
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  menuArrow: {
-    color: "#333",
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "700",
+    marginBottom: 8,
+    marginLeft: 4,
   },
-  saveBtnText: { color: "#000", fontSize: 16, fontWeight: "900" },
+  input: { height: 56, borderRadius: 16, paddingHorizontal: 16, fontSize: 16 },
+  saveBtn: {
+    height: 60,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveBtnText: { fontSize: 17, fontWeight: "800" },
 });
