@@ -77,7 +77,6 @@ export default function DailyTimeSetting() {
         </Pressable>
       </View>
 
-      {/* 안드로이드 시간 선택기 (시스템 기본) */}
       {Platform.OS === "android" && open && (
         <DateTimePicker
           value={draft}
@@ -88,7 +87,6 @@ export default function DailyTimeSetting() {
         />
       )}
 
-      {/* iOS 시간 선택기 (글래스모피즘 + 백드롭 닫기) */}
       {Platform.OS === "ios" && (
         <Modal
           visible={open}
@@ -97,7 +95,6 @@ export default function DailyTimeSetting() {
           onRequestClose={() => setOpen(false)}
         >
           <View style={styles.modalOverlay}>
-            {/* 모달 밖 영역 터치 시 닫기 */}
             <Pressable
               style={StyleSheet.absoluteFill}
               onPress={() => setOpen(false)}
