@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  AppState,
   Dimensions,
   Image,
   Pressable,
@@ -32,7 +33,6 @@ const CHEER_MESSAGES = [
   "충분히 잘하고 있어요, 조급해하지 말아요. 🌱",
   "당신만의 리듬으로 채워가는 멋진 하루! 🎨",
 ];
-
 const GlassCard = ({ children, style, intensity = 40, isDark }) => (
   <View
     style={[
@@ -117,7 +117,7 @@ export default function Home() {
     loadProfile();
 
     DeviceMotion.setUpdateInterval(16);
-    const subscription = DeviceMotion.addListener(({ rotation }) => {
+    const motionSub = DeviceMotion.addListener(({ rotation }) => {
       if (rotation) {
         const { gamma, beta } = rotation;
         Animated.spring(tiltX, {
@@ -132,7 +132,16 @@ export default function Home() {
         }).start();
       }
     });
-    return () => subscription.remove();
+
+    const appStateSub = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+      }
+    });
+
+    return () => {
+      motionSub.remove();
+      appStateSub.remove();
+    };
   }, []);
 
   const confirmDelete = (id) => {
@@ -148,6 +157,7 @@ export default function Home() {
     let lastReset = new Date();
     lastReset.setHours(targetH, targetM, 0, 0);
     if (now < lastReset) lastReset.setDate(lastReset.getDate() - 1);
+
     const completedInCurrentCycle = records.filter(
       (r) => r.completedAt && r.completedAt >= lastReset.getTime()
     ).length;
@@ -161,14 +171,9 @@ export default function Home() {
   }, [records, goals.length, reminderTime]);
 
   const { progress } = progressData;
-  const goCoordGoals = useMemo(
-    () =>
-      goals.filter(
-        (g) =>
-          g?.coord && (g.type === "go" || String(g.text || "").includes("가기"))
-      ),
-    [goals]
-  );
+
+  // 목표 필터링
+  const goCoordGoals = useMemo(() => goals.filter((g) => g?.coord), [goals]);
   const normalGoals = useMemo(() => goals.filter((g) => !g?.coord), [goals]);
 
   return (
@@ -192,7 +197,7 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
-        {/* HEADER */}
+        {/* 헤더 */}
         <View style={styles.header}>
           <View>
             <Text style={[styles.dateText, { color: theme.primary }]}>
@@ -214,7 +219,7 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* WELCOME CARD */}
+        {/* 웰컴 카드 */}
         <GlassCard style={styles.cardMargin} isDark={isDark} intensity={30}>
           <View style={styles.welcomeRow}>
             <View style={styles.welcomeAvatarContainer}>
@@ -231,7 +236,7 @@ export default function Home() {
             </View>
             <View style={styles.welcomeTextContent}>
               <Text style={[styles.welcomeName, { color: theme.text }]}>
-                안녕하세요, {profile.name}님
+                안녕하세요, {profile.name || "사용자"}님
               </Text>
               <Text style={[styles.welcomeMsg, { color: theme.primary }]}>
                 {cheerMsg}
@@ -240,7 +245,7 @@ export default function Home() {
           </View>
         </GlassCard>
 
-        {/* PROGRESS CARD */}
+        {/* 진행률 카드 */}
         <GlassCard style={styles.cardMargin} isDark={isDark}>
           <View style={styles.progressInfo}>
             <View>
@@ -276,7 +281,7 @@ export default function Home() {
           </View>
         </GlassCard>
 
-        {/* LIST SECTION */}
+        {/* 일반 할 일 목록 */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionLabel, { color: theme.subText }]}>
@@ -286,54 +291,43 @@ export default function Home() {
               눌러서 완료 • 길게 눌러 삭제
             </Text>
           </View>
-
-          {normalGoals.length === 0 && goCoordGoals.length === 0 ? (
+          {normalGoals.length === 0 && goCoordGoals.length === 0 && (
             <View style={styles.emptyBox}>
               <Text style={[styles.emptyText, { color: theme.subText }]}>
                 포근한 하루 되세요 ✨
               </Text>
             </View>
-          ) : (
-            normalGoals.map((g) => (
-              <AnimatedPressable
-                key={g.id}
-                onPress={() => completeGoal(g.id)}
-                onLongPress={() => confirmDelete(g.id)}
-                style={{ marginBottom: 12 }}
-              >
-                <GlassCard
-                  isDark={isDark}
-                  intensity={20}
-                  style={styles.goalCard}
-                >
-                  <View style={styles.goalCardContent}>
-                    <View
-                      style={[
-                        styles.checkCircle,
-                        { borderColor: theme.progressTrack },
-                      ]}
-                    />
-                    <Text style={[styles.goalText, { color: theme.text }]}>
-                      {g.text}
-                    </Text>
-                  </View>
-                </GlassCard>
-              </AnimatedPressable>
-            ))
           )}
+          {normalGoals.map((g) => (
+            <AnimatedPressable
+              key={g.id}
+              onPress={() => completeGoal(g.id)}
+              onLongPress={() => confirmDelete(g.id)}
+              style={{ marginBottom: 12 }}
+            >
+              <GlassCard isDark={isDark} intensity={20} style={styles.goalCard}>
+                <View style={styles.goalCardContent}>
+                  <View
+                    style={[
+                      styles.checkCircle,
+                      { borderColor: theme.progressTrack },
+                    ]}
+                  />
+                  <Text style={[styles.goalText, { color: theme.text }]}>
+                    {g.text}
+                  </Text>
+                </View>
+              </GlassCard>
+            </AnimatedPressable>
+          ))}
         </View>
 
-        {/* LOCATION SECTION */}
+        {/* 위치 기반 할 일 목록 */}
         {goCoordGoals.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionLabel, { color: theme.subText }]}>
                 발걸음이 닿는 곳
-              </Text>
-              <Text
-                style={[styles.sectionHint, { color: theme.primary + "99" }]}
-              >
-                눌러서 완료 • 길게 눌러 삭제
               </Text>
             </View>
             {goGoalsWithDistance.map((g) => (
@@ -378,6 +372,7 @@ export default function Home() {
           </View>
         )}
 
+        {/* 지도 및 하단 정보 */}
         <View style={styles.mapWrapper}>
           <View
             style={[
@@ -390,6 +385,8 @@ export default function Home() {
         </View>
         <GeoStatus radiusM={80} goalRadiusM={120} />
       </ScrollView>
+
+      {/* 오버레이  */}
       <FirstLaunchTutorial />
       <DailySetupOverlay />
     </SafeAreaView>
@@ -451,6 +448,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
+    elevation: 4,
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 10,

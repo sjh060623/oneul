@@ -58,7 +58,7 @@ export default function DailyTimeSetting() {
       <View style={styles.row}>
         <View style={styles.textGroup}>
           <Text style={[styles.title, { color: theme.text }]}>
-            알림 시간 설정
+            목표 시간 설정
           </Text>
           <Text style={[styles.subText, { color: theme.subText }]}>
             매일 목표를 설정할 시간이에요.

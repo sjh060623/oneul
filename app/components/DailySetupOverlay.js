@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
 import { DeviceMotion } from "expo-sensors";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -54,8 +54,8 @@ export default function DailySetupOverlay({ enabled = true }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const theme = isDark ? darkTheme : lightTheme;
-
   const { addGoal, reminderTime, clearPreviousDaysGoals } = useGoals();
+
   const [visible, setVisible] = useState(false);
   const [items, setItems] = useState(["", "", "", "", ""]);
   const [saving, setSaving] = useState(false);
@@ -65,24 +65,21 @@ export default function DailySetupOverlay({ enabled = true }) {
   const tiltX = useRef(new Animated.Value(0)).current;
   const tiltY = useRef(new Animated.Value(0)).current;
 
-  const pad2 = (n) => String(n).padStart(2, "0");
   const todayKey = () => {
     const d = new Date();
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
-  useEffect(() => {
-    if (visible) {
-      setItems(["", "", "", "", ""]);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
+  const setAt = (idx, v) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[idx] = v;
+      return next;
+    });
+  };
 
-  const checkDue = async () => {
+  const checkDue = useCallback(async () => {
     if (!enabled) return;
     try {
       const doneRaw = await AsyncStorage.getItem(DAILY_DONE_KEY);
@@ -98,22 +95,36 @@ export default function DailySetupOverlay({ enabled = true }) {
 
       if (isTimePast && notDoneToday) {
         if (!visible) {
-          clearPreviousDaysGoals();
+          if (typeof clearPreviousDaysGoals === "function") {
+            clearPreviousDaysGoals();
+          }
           setVisible(true);
         }
-      } else {
+      } else if (visible && !notDoneToday) {
         setVisible(false);
-        fadeAnim.setValue(0);
       }
     } catch (e) {
-      console.error(e);
+      console.error("checkDue Error:", e);
     }
-  };
+  }, [enabled, reminderTime, visible, clearPreviousDaysGoals]);
+
+  useEffect(() => {
+    if (visible) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [visible]);
 
   useEffect(() => {
     checkDue();
-    const interval = setInterval(checkDue, 1000);
-    const sub = AppState.addEventListener("change", (s) => {
+    const interval = setInterval(checkDue, 3000);
+
+    const appStateSub = AppState.addEventListener("change", (s) => {
       if (s === "active") checkDue();
     });
 
@@ -136,19 +147,12 @@ export default function DailySetupOverlay({ enabled = true }) {
 
     return () => {
       clearInterval(interval);
-      sub.remove();
+      appStateSub.remove();
       motionSub.remove();
     };
-  }, [reminderTime, enabled, visible]);
+  }, [checkDue, visible]);
 
-  const setAt = (idx, v) => {
-    setItems((prev) => {
-      const next = [...prev];
-      next[idx] = v;
-      return next;
-    });
-  };
-
+  // 목표 제출
   const submit = async () => {
     const trimmed = items.filter((s) => s.trim());
     if (saving || trimmed.length < 1) return;
@@ -163,13 +167,16 @@ export default function DailySetupOverlay({ enabled = true }) {
         JSON.stringify({ lastDoneDate: todayKey() })
       );
       setVisible(false);
+      setItems(["", "", "", "", ""]);
       Keyboard.dismiss();
-    } catch {
+    } catch (e) {
+      console.error(e);
     } finally {
       setSaving(false);
     }
   };
 
+  // 건너뛰기
   const submitPass = async () => {
     Alert.alert("목표 작성 건너뛰기", "오늘의 목표를 적지 않고 넘어갈까요?", [
       { text: "취소", style: "cancel" },
@@ -177,16 +184,11 @@ export default function DailySetupOverlay({ enabled = true }) {
         text: "건너뛰기",
         style: "destructive",
         onPress: async () => {
-          try {
-            await AsyncStorage.setItem(
-              DAILY_DONE_KEY,
-              JSON.stringify({ lastDoneDate: todayKey() })
-            );
-            setVisible(false);
-            Keyboard.dismiss();
-          } catch (e) {
-            console.error(e);
-          }
+          await AsyncStorage.setItem(
+            DAILY_DONE_KEY,
+            JSON.stringify({ lastDoneDate: todayKey() })
+          );
+          setVisible(false);
         },
       },
     ]);
@@ -201,6 +203,7 @@ export default function DailySetupOverlay({ enabled = true }) {
         tint={isDark ? "dark" : "light"}
         style={StyleSheet.absoluteFill}
       >
+        {/* 배경 글로우 효과 */}
         <View style={styles.glowContainer} pointerEvents="none">
           <Animated.View
             style={[
@@ -241,7 +244,6 @@ export default function DailySetupOverlay({ enabled = true }) {
                       </Text>
                     </View>
                   </View>
-
                   <Text style={[styles.sub, { color: theme.subText }]}>
                     성장을 위해 할 일을 적어주세요.
                   </Text>
@@ -258,25 +260,6 @@ export default function DailySetupOverlay({ enabled = true }) {
                           },
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.numberBox,
-                            {
-                              backgroundColor: isDark
-                                ? "rgba(255,255,255,0.1)"
-                                : "#FFF",
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.numberText,
-                              { color: theme.primary },
-                            ]}
-                          >
-                            {idx + 1}
-                          </Text>
-                        </View>
                         <TextInput
                           ref={(el) => (inputRefs.current[idx] = el)}
                           value={v}
@@ -294,12 +277,12 @@ export default function DailySetupOverlay({ enabled = true }) {
                     ))}
                   </View>
 
-                  {/* --- [수정] 최소 1개만 입력하면 버튼 활성화 --- */}
                   <AnimatedPressable
                     onPress={submit}
                     disabled={
                       items.filter((s) => s.trim()).length < 1 || saving
                     }
+                    style={styles.submitMargin}
                   >
                     <View
                       style={[
@@ -333,6 +316,7 @@ export default function DailySetupOverlay({ enabled = true }) {
   );
 }
 
+// 스타일 테마
 const lightTheme = {
   text: "#2D3748",
   subText: "#718096",
@@ -353,16 +337,7 @@ const darkTheme = {
 };
 
 const styles = StyleSheet.create({
-  fullOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: width,
-    height: height,
-    zIndex: 99999,
-  },
+  fullOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 99999 },
   glowContainer: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
@@ -417,18 +392,9 @@ const styles = StyleSheet.create({
     height: 56,
     borderWidth: 1,
   },
-  numberBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  numberText: { fontSize: 14, fontWeight: "900" },
   input: { flex: 1, fontSize: 16, fontWeight: "700" },
+  submitMargin: { marginTop: 32 },
   primaryBtn: {
-    marginTop: 32,
     height: 62,
     borderRadius: 22,
     alignItems: "center",

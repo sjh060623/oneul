@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "oneul",
+    "name": "다햇구나",
     "slug": "myapp-local",
     "version": "1.0.2",
     "scheme": "oneul",
@@ -33,7 +33,8 @@
             "deploymentTarget": "15.1"
           }
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "updates": {
       "enabled": false,

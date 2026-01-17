@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { DeviceEventEmitter } from "react-native";
 
 const ACTIVE_KEY = "GOALS_V1";
 const RECORDS_KEY = "GOAL_RECORDS_V1";
@@ -69,108 +70,87 @@ export function GoalsProvider({ children }) {
   const [goals, setGoals] = useState([]);
   const [records, setRecords] = useState([]);
   const [reminderTime, setReminderTimeState] = useState("09:00");
-  const [unachievedStats, setUnachievedStats] = useState({}); // { "YYYY-MM-DD" }
+  const [unachievedStats, setUnachievedStats] = useState({});
   const hydratedRef = useRef(false);
 
-  // 초기 로딩
-  useEffect(() => {
-    let mounted = true;
-    const boot = async () => {
-      try {
-        const [rawGoals, rawRecords, rawPref, rawStats] = await Promise.all([
-          AsyncStorage.getItem(ACTIVE_KEY),
-          AsyncStorage.getItem(RECORDS_KEY),
-          AsyncStorage.getItem(DAILY_PREF_KEY),
-          AsyncStorage.getItem(UNACHIEVED_KEY),
-        ]);
+  const loadDataFromDisk = async () => {
+    try {
+      const [rawGoals, rawRecords, rawPref, rawStats] = await Promise.all([
+        AsyncStorage.getItem(ACTIVE_KEY),
+        AsyncStorage.getItem(RECORDS_KEY),
+        AsyncStorage.getItem(DAILY_PREF_KEY),
+        AsyncStorage.getItem(UNACHIEVED_KEY),
+      ]);
 
-        if (!mounted) return;
-
-        if (rawStats) setUnachievedStats(JSON.parse(rawStats));
-        if (rawPref) {
-          const pref = JSON.parse(rawPref);
-          setReminderTimeState(pref.timeHHMM || "09:00");
-        }
-
-        const g = rawGoals ? JSON.parse(rawGoals) : [];
-        const r = rawRecords ? JSON.parse(rawRecords) : [];
-
-        const nextGoals = Array.isArray(g)
-          ? g.map(normalizeGoal).filter(Boolean)
-          : [];
-        const nextRecords = Array.isArray(r) ? r.filter((x) => x.text) : [];
-
-        setGoals(nextGoals);
-        setRecords(nextRecords);
-      } catch {
-        if (mounted) {
-          setGoals([]);
-          setRecords([]);
-        }
-      } finally {
-        hydratedRef.current = true;
+      if (rawStats) setUnachievedStats(JSON.parse(rawStats));
+      if (rawPref) {
+        const pref = JSON.parse(rawPref);
+        setReminderTimeState(pref.timeHHMM || "09:00");
       }
-    };
-    boot();
-    return () => {
-      mounted = false;
-    };
+
+      const g = rawGoals ? JSON.parse(rawGoals) : [];
+      const r = rawRecords ? JSON.parse(rawRecords) : [];
+      setGoals(Array.isArray(g) ? g.map(normalizeGoal).filter(Boolean) : []);
+      setRecords(Array.isArray(r) ? r.filter((x) => x.text) : []);
+    } catch (e) {
+      console.error("데이터 로드 실패", e);
+    } finally {
+      hydratedRef.current = true;
+    }
+  };
+
+  useEffect(() => {
+    loadDataFromDisk();
+    const subscription = DeviceEventEmitter.addListener(
+      "REFRESH_GOALS",
+      loadDataFromDisk
+    );
+    return () => subscription.remove();
   }, []);
 
-  const setReminderTime = async (timeHHMM) => {
-    setReminderTimeState(timeHHMM);
-    try {
-      await AsyncStorage.setItem(DAILY_PREF_KEY, JSON.stringify({ timeHHMM }));
-    } catch {}
-  };
-
-  const loadSettings = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(DAILY_PREF_KEY);
-      if (raw) setReminderTimeState(JSON.parse(raw).timeHHMM);
-    } catch {}
-  };
-
   useEffect(() => {
-    if (!hydratedRef.current) return;
-    AsyncStorage.setItem(ACTIVE_KEY, JSON.stringify(goals)).catch(() => {});
+    if (hydratedRef.current)
+      AsyncStorage.setItem(ACTIVE_KEY, JSON.stringify(goals));
   }, [goals]);
-
   useEffect(() => {
-    if (!hydratedRef.current) return;
-    AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records)).catch(() => {});
+    if (hydratedRef.current)
+      AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records));
   }, [records]);
-
   useEffect(() => {
-    if (!hydratedRef.current) return;
-    AsyncStorage.setItem(UNACHIEVED_KEY, JSON.stringify(unachievedStats)).catch(
-      () => {}
-    );
+    if (hydratedRef.current)
+      AsyncStorage.setItem(UNACHIEVED_KEY, JSON.stringify(unachievedStats));
   }, [unachievedStats]);
 
   const api = useMemo(() => {
     const clearPreviousDaysGoals = () => {
       const now = new Date();
-      const startOfToday = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      ).getTime();
+      // [수정] reminderTime을 기준으로 기준 시간(cutoff) 계산
+      const [targetH, targetM] = reminderTime.split(":").map(Number);
+      const lastResetPoint = new Date();
+      lastResetPoint.setHours(targetH, targetM, 0, 0);
+
+      // 현재 시각이 설정 시각보다 전이라면, 실제 기준은 '어제의 설정 시각'임
+      if (now < lastResetPoint) {
+        lastResetPoint.setDate(lastResetPoint.getDate() - 1);
+      }
+      const cutoffTime = lastResetPoint.getTime();
 
       setGoals((prev) => {
-        const toDelete = prev.filter((g) => g.createdAt < startOfToday);
+        // 기준 시간보다 이전에 생성된 목표들만 삭제 및 미달성 기록 대상
+        const toDelete = prev.filter((g) => g.createdAt < cutoffTime);
 
         if (toDelete.length > 0) {
-          const newStats = { ...unachievedStats };
-          toDelete.forEach((g) => {
-            const dKey = dateKeyFrom(g.createdAt);
-            newStats[dKey] = (newStats[dKey] || 0) + 1;
+          setUnachievedStats((prevStats) => {
+            const nextStats = { ...prevStats };
+            toDelete.forEach((g) => {
+              const dKey = dateKeyFrom(g.createdAt);
+              nextStats[dKey] = (nextStats[dKey] || 0) + 1;
+            });
+            return nextStats;
           });
-          setUnachievedStats(newStats);
         }
-
-        //
-        return prev.filter((g) => g.createdAt >= startOfToday);
+        // 기준 시간 이후에 생성된 목표만 유지
+        return prev.filter((g) => g.createdAt >= cutoffTime);
       });
     };
 
@@ -200,18 +180,24 @@ export function GoalsProvider({ children }) {
       goals,
       records,
       reminderTime,
-      unachievedStats, // 추가
-      setReminderTime,
-      clearPreviousDaysGoals, // 수정됨
-      loadSettings,
+      unachievedStats,
+      clearPreviousDaysGoals,
+      setReminderTime: async (timeHHMM) => {
+        setReminderTimeState(timeHHMM);
+        try {
+          await AsyncStorage.setItem(
+            DAILY_PREF_KEY,
+            JSON.stringify({ timeHHMM })
+          );
+        } catch {}
+      },
       addGoal,
       completeGoal,
       removeGoal: (id) => setGoals((prev) => prev.filter((g) => g.id !== id)),
-      updateRecord: (id, patch = {}) => {
+      updateRecord: (id, patch = {}) =>
         setRecords((prev) =>
           prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
-        );
-      },
+        ),
       removeRecord: (id) =>
         setRecords((prev) => prev.filter((r) => r.id !== id)),
       clearAll: () => {
@@ -219,8 +205,7 @@ export function GoalsProvider({ children }) {
         setRecords([]);
         setUnachievedStats({});
       },
-      setGoals,
-      setRecords,
+      loadDataFromDisk,
     };
   }, [goals, records, reminderTime, unachievedStats]);
 
